@@ -78,6 +78,7 @@ async function createWindow() {
 
     const win = new BrowserWindow({
         title: "Railway Track Inspection System",
+        icon: path.join(__dirname, "..", "..", "build", "railsuraksha.jpg"),
         width: 1400,
         height: 900,
         webPreferences: {
@@ -139,7 +140,12 @@ async function createWindow() {
     }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    if (process.platform === 'darwin') {
+        app.dock.setIcon(path.join(__dirname, "..", "..", "build", "railsuraksha.jpg"));
+    }
+    createWindow();
+});
 
 app.on("before-quit", () => {
     if (backendProc) {

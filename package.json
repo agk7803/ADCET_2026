@@ -79,7 +79,7 @@
     "win": {
       "target": "nsis",
       "forceCodeSigning": false,
-      "icon": "build/icon.ico"
+      "icon": "build/railsuraksha.jpg"
     },
     "nsis": {
       "oneClick": false,
