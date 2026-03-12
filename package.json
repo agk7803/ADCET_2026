@@ -1,0 +1,94 @@
+{
+  "name": "railway-itms",
+  "private": true,
+  "version": "0.0.0",
+  "main": "electron/main/index.cjs",
+  "author": "Your Name",
+  "description": "Integrated Track Management System desktop app using Electron and Vite",
+  "type": "module",
+  "scripts": {
+    "dev:backend": "cd backend && python server.py",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "dev": "concurrently -n \"FRONTEND,ELECTRON\" -c \"blue,magenta\" \"npm run dev:frontend\" \"npm run dev:electron\"",
+    "build:frontend": "cd frontend && npm run build",
+    "build:electron": "npm run build:frontend && electron-builder",
+    "sim:start": "curl -s -X POST http://localhost:8000/sim/start -H \"Content-Type: application/json\" -d \"{\\\"rate_hz\\\": 20}\"",
+    "sim:stop": "curl -s -X POST http://localhost:8000/sim/stop"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "@types/react-plotly.js": "^2.6.4",
+    "chart.js": "^4.5.1",
+    "lucide-react": "^0.344.0",
+    "plotly.js": "^3.3.0",
+    "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^18.3.1",
+    "react-plotly.js": "^2.6.0",
+    "recharts": "^3.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.18",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^38.7.1",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "globals": "^15.9.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.3.0",
+    "vite": "^5.4.20",
+    "wait-on": "^9.0.3",
+    "wait-port": "^1.1.0"
+  },
+  "build": {
+    "appId": "com.itms.railway",
+    "productName": "Railway Track Inspection System",
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "main.cjs",
+      "package.json",
+      "assets/**/*",
+      {
+        "from": "backend/dist",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/itms-backend.exe",
+        "to": "itms-backend.exe"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "forceCodeSigning": false,
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Railway Track Inspection System"
+    }
+  }
+}
