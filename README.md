@@ -13,7 +13,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/agk7803/ADCET_2026
 cd Source_code
 ```
 
