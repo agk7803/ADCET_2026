@@ -121,9 +121,9 @@ export default function RailCondition() {
 
   const stopRecording = async () => {
     setBusy(true);
+    setRecording(false);
     try {
       await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
-      setRecording(false);
     } catch (e: any) {
       console.error(e);
       alert("Error: " + (e.message || "Failed to stop recording"));
@@ -157,18 +157,19 @@ export default function RailCondition() {
 
   const stopCamera = async () => {
     setBusy(true);
+    setCameraOn(false);
+    
+    if (recording) {
+      stopRecording().catch(() => {});
+    }
+    
     try {
-      if (recording) {
-         await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
-         setRecording(false);
-      }
       const body = { index: selectedCamIndex };
       await fetch(`${API_BASE}/camera/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      setCameraOn(false);
     } catch (e: any) {
       console.error(e);
       alert("Error: " + (e.message || "Failed to stop camera"));

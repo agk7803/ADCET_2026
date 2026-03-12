@@ -219,6 +219,7 @@ export const ConnectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const clearHistory = useCallback(() => {
         setHistory([]);
+        setData(null);
         setViewFilters({}); // Reset all view filters too
     }, []);
 

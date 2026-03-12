@@ -419,6 +419,12 @@ def list_cameras():
     cameras = cv_service.get_available_cameras()
     return {"cameras": cameras}
 
+@router.post("/reset")
+def reset_system():
+    """Reset the distance/tracker state in the backend."""
+    sensors.reset_system()
+    return {"status": "success", "message": "System reset"}
+
 @router.post("/camera/start")
 def start_camera():
     # In this modular version, camera manager handles lifecycle

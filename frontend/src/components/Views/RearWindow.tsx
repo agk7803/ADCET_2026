@@ -12,7 +12,7 @@ const RearWindow: React.FC = () => {
 
   // camera selection
   const [cameraIndex, setCameraIndex] = useState<number>(0);
-  const [cameraList, setCameraList] = useState<number[]>([]);
+  const [cameraList, setCameraList] = useState<number[]>([0]);
 
   // timer
   const [timer, setTimer] = useState("00:00:00");
@@ -114,11 +114,10 @@ const RearWindow: React.FC = () => {
 
   const stopRecording = async () => {
     setBusy(true);
+    setRecording(false);
     setError(null);
     try {
-      const recStop = await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
-      if (!recStop.ok) throw new Error("recording/stop failed");
-      setRecording(false);
+      await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
     } catch (e: any) {
       console.error(e);
       setError(String(e));
@@ -165,42 +164,25 @@ const RearWindow: React.FC = () => {
   const stopCamera = async () => {
 
     setBusy(true);
+    setCameraOn(false);
+    if (recording) stopRecording().catch(() => {});
     setError(null);
 
     try {
-
-      if (recording) {
-        const recStop = await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
-        if (!recStop.ok) throw new Error("recording/stop failed");
-        setRecording(false);
-      }
-
-      const camStop = await fetch(`${API_BASE}/camera/stop`, {
+      await fetch(`${API_BASE}/camera/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ index: cameraIndex })
       });
-
-      if (!camStop.ok) {
-        throw new Error("camera/stop failed");
-      }
-
       setReloadKey(k => k + 1);
-      setCameraOn(false);
-
     } catch (e: any) {
-
       console.error(e);
       setError(String(e));
-
     } finally {
-
       setBusy(false);
-
     }
 
   };
-
 
 
 
@@ -239,54 +221,38 @@ const RearWindow: React.FC = () => {
 
 
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 15, alignItems: "center" }}>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontWeight: "bold", fontSize: 13, color: "#333" }}>Camera:</span>
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <div className="bg-gray-50 border border-gray-200 rounded p-3 flex items-center gap-4">
+          <span className="text-sm font-bold text-gray-700">Camera Source:</span>
           <select 
             value={cameraIndex} 
             onChange={(e) => setCameraIndex(Number(e.target.value))}
-            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontWeight: "bold", cursor: "pointer" }}
+            className="p-2 border rounded text-sm"
+            disabled={cameraOn}
           >
-            {cameraList.map((i) => <option key={i} value={i}>{`Cam ${i}`}</option>)}
+            {cameraList.map((i) => <option key={i} value={i}>{`Camera Index ${i}`}</option>)}
           </select>
         </div>
 
-        <button
-          onClick={cameraOn ? stopCamera : startCamera}
-          disabled={busy}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "none",
-            fontWeight: "bold",
-            cursor: busy ? "not-allowed" : "pointer",
-            background: busy ? "#ccc" : cameraOn ? "#dc2626" : "#16a34a",
-            color: "#fff",
-          }}
-        >
-          {cameraOn ? "⏹ Stop Camera" : "▶ Start Camera"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={cameraOn ? stopCamera : startCamera}
+            disabled={busy}
+            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy ? "bg-gray-400 text-gray-200" : cameraOn ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
+          >
+            {cameraOn ? "Stop Camera" : "Start Camera"}
+          </button>
 
-        <button
-          onClick={recording ? stopRecording : startRecording}
-          disabled={busy || !cameraOn}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "none",
-            fontWeight: "bold",
-            cursor: (busy || !cameraOn) ? "not-allowed" : "pointer",
-            background: (busy || !cameraOn) ? "#ccc" : recording ? "#f97316" : "#eab308",
-            color: "#fff",
-            opacity: !cameraOn ? 0.5 : 1,
-          }}
-        >
-          {recording ? "⏹ Stop Recording" : "🔴 Start Recording"}
-        </button>
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            disabled={busy || !cameraOn}
+            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy || !cameraOn ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50" : recording ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-white"}`}
+          >
+            {recording ? "Stop Recording" : "Start Recording"}
+          </button>
+        </div>
 
-        {busy && <div style={{ color: "#666" }}>Working...</div>}
-
+        {busy && <span className="text-sm text-gray-500">Working...</span>}
       </div>
 
 

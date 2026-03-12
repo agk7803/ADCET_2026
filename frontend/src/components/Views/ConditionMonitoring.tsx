@@ -176,26 +176,22 @@ const ConditionMonitoring: React.FC = () => {
   const stopCamera = async () => {
     setError(null);
     setBusy(true);
-    try {
-      if (recording) {
-          // 1. Stop Sensor Recording
-          await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
-          // 2. Stop Condition Recording
-          await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
-          setRecording(false);
-      }
+    setCameraOn(false); // optimistic update
 
-      // 3. Stop Camera Hardware
-      const body = { index: selectedBackendIndex };
+    // Fire and forget
+    if (recording) {
+        setRecording(false);
+        fetch(`${API_BASE}/recording/stop`, { method: "POST" }).catch(() => {});
+        fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" }).catch(() => {});
+    }
+
+    try {
       await fetch(`${API_BASE}/camera/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ index: selectedBackendIndex }),
       });
-
-      // force reload to clear image
       setReloadKey((k) => k + 1);
-      setCameraOn(false);
     } catch (e: any) {
       console.error("stopCamera error", e);
       setError(String(e?.message ?? e));
@@ -250,49 +246,34 @@ const ConditionMonitoring: React.FC = () => {
             AI Model
           </button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontWeight: "bold", fontSize: 13, color: "#333" }}>Camera:</span>
+        <div className="bg-gray-50 border border-gray-200 rounded p-3 flex items-center gap-4">
+          <span className="text-sm font-bold text-gray-700">Camera Source:</span>
           <select 
             value={selectedBackendIndex} 
             onChange={(e) => setSelectedBackendIndex(Number(e.target.value))}
-            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontWeight: "bold", cursor: "pointer" }}
+            className="p-2 border rounded text-sm"
           >
-            {backendDevices.map((i) => <option key={i} value={i}>{`Cam ${i}`}</option>)}
+            {backendDevices.map((i) => <option key={i} value={i}>{`Camera Index ${i}`}</option>)}
           </select>
         </div>
 
-        <button
-          onClick={cameraOn ? stopCamera : startCamera}
-          disabled={busy}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "none",
-            fontWeight: "bold",
-            cursor: busy ? "not-allowed" : "pointer",
-            background: busy ? "#ccc" : cameraOn ? "#dc2626" : "#16a34a",
-            color: "#fff",
-          }}
-        >
-          {cameraOn ? "⏹ Stop Camera" : "▶ Start Camera"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={cameraOn ? stopCamera : startCamera}
+            disabled={busy}
+            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy ? "bg-gray-400 text-gray-200" : cameraOn ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
+          >
+            {cameraOn ? "Stop Camera" : "Start Camera"}
+          </button>
 
-        <button
-          onClick={recording ? stopRecording : startRecording}
-          disabled={busy || !cameraOn}
-          style={{
-            padding: "8px 20px",
-            borderRadius: 6,
-            border: "none",
-            fontWeight: "bold",
-            cursor: (busy || !cameraOn) ? "not-allowed" : "pointer",
-            background: (busy || !cameraOn) ? "#ccc" : recording ? "#f97316" : "#eab308",
-            color: "#fff",
-            opacity: !cameraOn ? 0.5 : 1,
-          }}
-        >
-          {recording ? "⏹ Stop Recording" : "🔴 Start Recording"}
-        </button>
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            disabled={busy || !cameraOn}
+            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy || !cameraOn ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50" : recording ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-white"}`}
+          >
+            {recording ? "Stop Recording" : "Start Recording"}
+          </button>
+        </div>
         <button onClick={reloadStream} style={{ background: "#6b7280", color: "#fff", padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer" }}>
           Reload
         </button>
@@ -317,23 +298,23 @@ const ConditionMonitoring: React.FC = () => {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {/* Left: Raw */}
-        <div style={{ background: "#000", borderRadius: 8, overflow: "hidden", border: "2px solid #333", position: "relative", minHeight: 360 }}>
-          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>Raw Feed</div>
+        <div style={{ background: "#000", borderRadius: 8, overflow: "hidden", border: "2px solid #333", position: "relative", aspectRatio: "16/9" }}>
+          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12, zIndex: 2 }}>Raw Feed</div>
           {cameraOn ? (
             <img
               key={`raw-${reloadKey}`}
               src={`${API_BASE}/video_feed?index=${selectedBackendIndex}&cache=${reloadKey}`}
               alt="Raw Feed"
-              style={{ width: "100%", height: "auto", display: "block" }}
+              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />
           ) : (
-            <div style={{ height: 360, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Waiting...</div>
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Waiting...</div>
           )}
         </div>
 
         {/* Right: Processed */}
-        <div style={{ background: "#000", borderRadius: 8, overflow: "hidden", border: "2px solid #333", position: "relative", minHeight: 360 }}>
-          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12 }}>
+        <div style={{ background: "#000", borderRadius: 8, overflow: "hidden", border: "2px solid #333", position: "relative", aspectRatio: "16/9" }}>
+          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12, zIndex: 2 }}>
             {analysisMode === "ai" ? "AI Detection" : "Laser Mask"}
           </div>
           {cameraOn ? (
@@ -344,10 +325,10 @@ const ConditionMonitoring: React.FC = () => {
                 : `${API_BASE}/video_feed_condition_overlay?index=${selectedBackendIndex}&cache=${reloadKey}`
               }
               alt="Processed Feed"
-              style={{ width: "100%", height: "auto", display: "block" }}
+              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />
           ) : (
-            <div style={{ height: 360, display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Waiting...</div>
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Waiting...</div>
           )}
         </div>
       </div>

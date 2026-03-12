@@ -54,10 +54,26 @@ export const Header: React.FC = () => {
           <button
             onClick={() => {
               if (uiDataActive) {
+                // Immediately update UI — don't wait for backend
                 setUiDataActive(false);
+
+                // Fire-and-forget: stop all recordings and cameras in background
+                const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+                fetch(`${API}/recording/stop`, { method: "POST" }).catch(() => {});
+                fetch(`${API}/recording/geometry/stop`, { method: "POST" }).catch(() => {});
+                fetch(`${API}/recording/condition/stop`, { method: "POST" }).catch(() => {});
+                for (let i = 0; i < 4; i++) {
+                  fetch(`${API}/camera/stop`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ index: i }),
+                  }).catch(() => {});
+                }
               } else {
                 clearHistory();
                 setSessionStartTime(Date.now());
+                const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+                fetch(`${API}/reset`, { method: "POST" }).catch(() => {});
                 setUiDataActive(true);
               }
             }}
