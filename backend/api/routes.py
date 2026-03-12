@@ -347,6 +347,18 @@ def stop_geometry_recording():
     cv_service.rail_processor.stop_recording()
     return {"status": "stopped"}
 
+@router.post("/recording/condition/start")
+def start_condition_recording():
+    cv_service.cond_processor.start_recording()
+    cv_service.yolo_processor.start_recording()
+    return {"status": "started"}
+
+@router.post("/recording/condition/stop")
+def stop_condition_recording():
+    cv_service.cond_processor.stop_recording()
+    cv_service.yolo_processor.stop_recording()
+    return {"status": "stopped"}
+
 @router.get("/condition/mode")
 def get_condition_mode():
     return {"mode": CONDITION_MODE}

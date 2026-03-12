@@ -127,7 +127,7 @@ class TrackGeometryProcessor:
         histeqaul_frame = cv2.equalizeHist(gray_frame)
         blur_frame = cv2.GaussianBlur(histeqaul_frame, (5, 5), 5)
 
-        if self.first:
+        if self.first or (self.old_valid_frame is not None and self.old_valid_frame.shape != blur_frame.shape):
             merge_frame = blur_frame
             self.first = False
             self.old_valid_frame = merge_frame.copy()
