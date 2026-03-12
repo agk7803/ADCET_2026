@@ -298,7 +298,20 @@ export const ConnectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 gaugePx: latestGaugePxRef.current
             }));
 
-            setReplayBuffer(formatted);
+            // Downsample to max 400 points for smooth graph rendering
+            const MAX_REPLAY_POINTS = 400;
+            if (formatted.length > MAX_REPLAY_POINTS) {
+                const step = formatted.length / MAX_REPLAY_POINTS;
+                const downsampled: TelemetryPoint[] = [];
+                for (let i = 0; i < MAX_REPLAY_POINTS; i++) {
+                    downsampled.push(formatted[Math.floor(i * step)]);
+                }
+                // Always include the very last point
+                downsampled[downsampled.length - 1] = formatted[formatted.length - 1];
+                setReplayBuffer(downsampled);
+            } else {
+                setReplayBuffer(formatted);
+            }
         } catch (err) {
             console.error("Replay fetch failed:", err);
             setIsReplaying(false);

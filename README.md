@@ -1,4 +1,4 @@
-# 🚂 RailSuraksha ITMS — Integrated Track Management System
+# 🚂 Railway ITMS — Integrated Track Management System
 
 ## Getting Started
 
@@ -13,7 +13,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/agk7803/ADCET_2026
+git clone <repo-url>
 cd Source_code
 ```
 

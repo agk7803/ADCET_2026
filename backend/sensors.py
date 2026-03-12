@@ -311,10 +311,10 @@ def _serial_loop(port, baud):
                 try:
                     data = json.loads(line)
                     # Debug print to confirm data flow
-                    print(f"DEBUG SENSORS: Valid JSON received: {str(data)[:60]}...") 
+                   # print(f"DEBUG SENSORS: Valid JSON received: {str(data)[:60]}...") 
                     _process_data(data)
                 except json.JSONDecodeError:
-                    print(f"DEBUG SENSORS: JSON Decode Error on line: {line}")
+                   # print(f"DEBUG SENSORS: JSON Decode Error on line: {line}")
                     pass
         except Exception as e:
             logger.error(f"Serial loop error: {e}")
