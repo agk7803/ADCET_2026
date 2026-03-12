@@ -5,6 +5,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const RearWindow: React.FC = () => {
 
   const [cameraOn, setCameraOn] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -29,7 +30,7 @@ const RearWindow: React.FC = () => {
   // timer logic
   useEffect(() => {
 
-    if (cameraOn && !startTimeRef.current) {
+    if (recording && !startTimeRef.current) {
       startTimeRef.current = Date.now();
 
       intervalRef.current = window.setInterval(() => {
@@ -39,7 +40,7 @@ const RearWindow: React.FC = () => {
       }, 1000);
     }
 
-    if (!cameraOn) {
+    if (!recording) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -55,7 +56,7 @@ const RearWindow: React.FC = () => {
       }
     }
 
-  }, [cameraOn]);
+  }, [recording]);
 
 
 
@@ -96,20 +97,42 @@ const RearWindow: React.FC = () => {
 
 
 
+  const startRecording = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const recStart = await fetch(`${API_BASE}/recording/start`, { method: "POST" });
+      if (!recStart.ok) throw new Error("recording/start failed");
+      setRecording(true);
+    } catch (e: any) {
+      console.error(e);
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const recStop = await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
+      if (!recStop.ok) throw new Error("recording/stop failed");
+      setRecording(false);
+    } catch (e: any) {
+      console.error(e);
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const startCamera = async () => {
 
     setBusy(true);
     setError(null);
 
     try {
-
-      const recStart = await fetch(`${API_BASE}/recording/start`, {
-        method: "POST"
-      });
-
-      if (!recStart.ok) {
-        throw new Error("recording/start failed");
-      }
 
       const camStart = await fetch(`${API_BASE}/camera/start`, {
         method: "POST",
@@ -146,12 +169,10 @@ const RearWindow: React.FC = () => {
 
     try {
 
-      const recStop = await fetch(`${API_BASE}/recording/stop`, {
-        method: "POST"
-      });
-
-      if (!recStop.ok) {
-        throw new Error("recording/stop failed");
+      if (recording) {
+        const recStop = await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
+        if (!recStop.ok) throw new Error("recording/stop failed");
+        setRecording(false);
       }
 
       const camStop = await fetch(`${API_BASE}/camera/stop`, {
@@ -181,7 +202,6 @@ const RearWindow: React.FC = () => {
   };
 
 
-  const reloadStream = () => setReloadKey(k => k + 1);
 
 
   return (
@@ -219,48 +239,56 @@ const RearWindow: React.FC = () => {
 
 
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 15 }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 15, alignItems: "center" }}>
 
-        <select
-          value={cameraIndex}
-          onChange={(e) => setCameraIndex(Number(e.target.value))}
-        >
-          {cameraList.map(i => (
-            <option key={i} value={i}>
-              Camera {i}
-            </option>
-          ))}
-        </select>
-
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontWeight: "bold", fontSize: 13, color: "#333" }}>Camera:</span>
+          <select 
+            value={cameraIndex} 
+            onChange={(e) => setCameraIndex(Number(e.target.value))}
+            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontWeight: "bold", cursor: "pointer" }}
+          >
+            {cameraList.map((i) => <option key={i} value={i}>{`Cam ${i}`}</option>)}
+          </select>
+        </div>
 
         <button
-          onClick={startCamera}
-          disabled={busy || cameraOn}
-          style={{ background: "#16a34a", color: "#fff", padding: "8px 16px", borderRadius: 6 }}
+          onClick={cameraOn ? stopCamera : startCamera}
+          disabled={busy}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 6,
+            border: "none",
+            fontWeight: "bold",
+            cursor: busy ? "not-allowed" : "pointer",
+            background: busy ? "#ccc" : cameraOn ? "#dc2626" : "#16a34a",
+            color: "#fff",
+          }}
         >
-          Start Camera
+          {cameraOn ? "⏹ Stop Camera" : "▶ Start Camera"}
         </button>
 
-
         <button
-          onClick={stopCamera}
+          onClick={recording ? stopRecording : startRecording}
           disabled={busy || !cameraOn}
-          style={{ background: "#dc2626", color: "#fff", padding: "8px 16px", borderRadius: 6 }}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 6,
+            border: "none",
+            fontWeight: "bold",
+            cursor: (busy || !cameraOn) ? "not-allowed" : "pointer",
+            background: (busy || !cameraOn) ? "#ccc" : recording ? "#f97316" : "#eab308",
+            color: "#fff",
+            opacity: !cameraOn ? 0.5 : 1,
+          }}
         >
-          Stop Camera
+          {recording ? "⏹ Stop Recording" : "🔴 Start Recording"}
         </button>
 
-
-        <button
-          onClick={reloadStream}
-          style={{ background: "#6b7280", color: "#fff", padding: "8px 16px", borderRadius: 6 }}
-        >
-          Reload
-        </button>
-
-        {busy && <div>Working...</div>}
+        {busy && <div style={{ color: "#666" }}>Working...</div>}
 
       </div>
+
 
 
 

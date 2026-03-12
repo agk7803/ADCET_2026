@@ -28,9 +28,8 @@ def init_writer(path, fps=20.0, resolution=(640, 480)):
         return None
 
 def ensure_dirs(subfolder):
-    """Ensure data/TrackGeometry/<subfolder> exists."""
-    # path = os.path.join(os.getcwd(), "data", "TrackGeometry", subfolder)
-    path = os.path.join(config.STORAGE_DIR, "TrackGeometry", subfolder)
+    """Ensure video_recording/<subfolder> exists."""
+    path = os.path.join(config.STORAGE_DIR, "video_recording", subfolder)
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -244,7 +243,7 @@ class TrackGeometryProcessor:
         return output_frame
 
     def start_recording(self):
-        root = ensure_dirs("dottedcv")
+        root = ensure_dirs("TrackGeometry")
         ts = time.strftime("%Y%m%d_%H%M%S")
         path = os.path.join(root, f"track_geo_{ts}.mp4")
         
@@ -309,7 +308,7 @@ class RailProfileProcessor:
         return combined
 
     def start_recording(self):
-        root = ensure_dirs("railmask")
+        root = ensure_dirs("RailProfile")
         ts = time.strftime("%Y%m%d_%H%M%S")
         path = os.path.join(root, f"rail_mask_{ts}.mp4")
         
@@ -401,10 +400,7 @@ class RailConditionProcessor:
         pass
 
     def start_recording(self):
-        # User requested: /Users/atharvakolhe/Desktop/projcopy/project/backend/data/railprofile
-        # root = os.path.join(os.getcwd(), "data", "railprofile")
-        root = os.path.join(config.STORAGE_DIR, "RailProfile")
-        os.makedirs(root, exist_ok=True)
+        root = ensure_dirs("ConditionMonitoring")
         ts = time.strftime("%Y%m%d_%H%M%S")
         self.filename_overlay = os.path.join(root, f"overlay_{ts}.mp4")
         self.filename_mask = os.path.join(root, f"mask_{ts}.mp4")
@@ -435,9 +431,7 @@ class YoloProcessor:
         
         self.recording = False
         self.writer = None
-        # self.output_dir = os.path.join(os.getcwd(), "data", "RailCondition")
-        self.output_dir = os.path.join(config.STORAGE_DIR, "RailCondition")
-        os.makedirs(self.output_dir, exist_ok=True)
+        self.output_dir = ensure_dirs("ConditionMonitoring")
         self.filename = ""
         
         self.lock = threading.Lock()

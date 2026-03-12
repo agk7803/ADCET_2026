@@ -6,6 +6,8 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 export default function RailCondition() {
   const { data, connected } = useConnection();
   const [cameraOn, setCameraOn] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   const [localChainage, setLocalChainage] = useState(data?.y ?? 0);
@@ -84,7 +86,7 @@ export default function RailCondition() {
   };
 
   useEffect(() => {
-    if (cameraOn) {
+    if (recording) {
       timerRef.current = setInterval(() => {
         setElapsedTime(prev => prev + 1);
       }, 1000);
@@ -94,7 +96,7 @@ export default function RailCondition() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [cameraOn]);
+  }, [recording]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -103,28 +105,75 @@ export default function RailCondition() {
     return `${h}:${m}:${s}`;
   };
 
-  const toggleRecording = async () => {
+  const startRecording = async () => {
+    setBusy(true);
     try {
-      if (cameraOn) {
-        // Stop
-        await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
-        setCameraOn(false);
-      } else {
-        // Start
-        // 1. Ensure Sensors Connected
-        try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { console.warn("Connect failed or already connected"); }
-
-        // 2. Start Video Recording
-        const res = await fetch(`${API_BASE}/recording/condition/start`, { method: "POST" });
-        if (!res.ok) throw new Error("Server returned " + res.status);
-
-        setElapsedTime(0);
-        setCameraOn(true);
-        setReloadKey((p) => p + 1);
-      }
+      const res = await fetch(`${API_BASE}/recording/condition/start`, { method: "POST" });
+      if (!res.ok) throw new Error("Server returned " + res.status);
+      setRecording(true);
     } catch (e: any) {
       console.error(e);
-      alert("Error: " + (e.message || "Failed to toggle recording"));
+      alert("Error: " + (e.message || "Failed to start recording"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    setBusy(true);
+    try {
+      await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
+      setRecording(false);
+    } catch (e: any) {
+      console.error(e);
+      alert("Error: " + (e.message || "Failed to stop recording"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startCamera = async () => {
+    setBusy(true);
+    try {
+      try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { console.warn("Connect failed or already connected"); }
+
+      const body = { index: selectedCamIndex };
+      await fetch(`${API_BASE}/camera/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      setElapsedTime(0);
+      setCameraOn(true);
+      setReloadKey((p) => p + 1);
+    } catch (e: any) {
+      console.error(e);
+      alert("Error: " + (e.message || "Failed to start camera"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stopCamera = async () => {
+    setBusy(true);
+    try {
+      if (recording) {
+         await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
+         setRecording(false);
+      }
+      const body = { index: selectedCamIndex };
+      await fetch(`${API_BASE}/camera/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setCameraOn(false);
+    } catch (e: any) {
+      console.error(e);
+      alert("Error: " + (e.message || "Failed to stop camera"));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -237,6 +286,25 @@ export default function RailCondition() {
             </select>
           </div>
         )}
+
+        {/* UNIFIED BUTTONS */}
+        <div className="flex gap-2">
+          <button
+            onClick={cameraOn ? stopCamera : startCamera}
+            disabled={busy}
+            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy ? "bg-gray-400 text-gray-200" : cameraOn ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
+          >
+            {cameraOn ? "Stop Camera" : "Start Camera"}
+          </button>
+
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            disabled={busy || !cameraOn}
+            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy || !cameraOn ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50" : recording ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-white"}`}
+          >
+            {recording ? "Stop Recording" : "Start Recording"}
+          </button>
+        </div>
       </div>
 
       {/* VIDEO FEEDS */}
@@ -282,16 +350,6 @@ export default function RailCondition() {
         </div>
       </div>
 
-      {/* CONTROLS */}
-      <div className="flex justify-center">
-        <button
-          onClick={toggleRecording}
-          className={`px-8 py-3 rounded font-bold text-white transition shadow-lg ${cameraOn ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"
-            }`}
-        >
-          {cameraOn ? "STOP RECORDING" : "START RECORDING"}
-        </button>
-      </div>
     </div>
   );
 }

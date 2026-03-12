@@ -5,6 +5,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const ConditionMonitoring: React.FC = () => {
   const [reloadKey, setReloadKey] = useState(0);
   const [cameraOn, setCameraOn] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,25 +34,25 @@ const ConditionMonitoring: React.FC = () => {
 
   // Timer effect
   useEffect(() => {
-    if (cameraOn && !startTimeRef.current) {
+    if (recording && !startTimeRef.current) {
       startTimeRef.current = Date.now();
       timerIntervalRef.current = window.setInterval(() => {
         if (startTimeRef.current) {
           setTimer(formatTime(Date.now() - startTimeRef.current));
         }
       }, 1000);
-    } else if (!cameraOn) {
+    } else if (!recording) {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
       startTimeRef.current = null;
-      // Removed setTimer("00:00:00")
+      setTimer("00:00:00");
     }
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [cameraOn]);
+  }, [recording]);
 
   useEffect(() => {
     // Try to fetch backend camera list (non-fatal)
@@ -60,10 +61,10 @@ const ConditionMonitoring: React.FC = () => {
         const r = await fetch(`${API_BASE}/camera/list`);
         if (r.ok) {
           const j = await r.json();
-          // try to map to indices if backend returns objects
           if (Array.isArray(j.cameras)) {
             const indices = j.cameras.map((c: any) => c.index).filter((x: any) => typeof x === "number");
             if (indices.length > 0) {
+                setBackendDevices(indices);
                 setSelectedBackendIndex(indices[0]);
             }
           }
@@ -112,16 +113,44 @@ const ConditionMonitoring: React.FC = () => {
     } catch (e) { console.error("Failed to select model", e); }
   };
 
-  const startCamera = async () => {
+  const startRecording = async () => {
     setError(null);
     setBusy(true);
     try {
       // 1. Start Sensor Recording
       await fetch(`${API_BASE}/recording/start`, { method: "POST" });
-
       // 2. Start Condition Recording (Video) -> Handles Yolo/Laser based on mode
       await fetch(`${API_BASE}/recording/condition/start`, { method: "POST" });
+      setRecording(true);
+    } catch (e: any) {
+      console.error("startRecording error", e);
+      setError(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
+  const stopRecording = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      // 1. Stop Sensor Recording
+      await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
+      // 2. Stop Condition Recording
+      await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
+      setRecording(false);
+    } catch (e: any) {
+      console.error("stopRecording error", e);
+      setError(String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startCamera = async () => {
+    setError(null);
+    setBusy(true);
+    try {
       // 3. Ensure Sensors Connected (for Chainage)
       try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { }
 
@@ -134,7 +163,6 @@ const ConditionMonitoring: React.FC = () => {
       });
 
       // 5. Reload MJPEG src and mark on
-      setTimer("00:00:00"); // Reset timer on NEW recording
       setReloadKey((k) => k + 1);
       setCameraOn(true);
     } catch (e: any) {
@@ -149,11 +177,13 @@ const ConditionMonitoring: React.FC = () => {
     setError(null);
     setBusy(true);
     try {
-      // 1. Stop Sensor Recording
-      await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
-
-      // 2. Stop Condition Recording
-      await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
+      if (recording) {
+          // 1. Stop Sensor Recording
+          await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
+          // 2. Stop Condition Recording
+          await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
+          setRecording(false);
+      }
 
       // 3. Stop Camera Hardware
       const body = { index: selectedBackendIndex };
@@ -193,10 +223,6 @@ const ConditionMonitoring: React.FC = () => {
 
       {/* Control Bar */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        <select value={selectedBackendIndex} onChange={(e) => setSelectedBackendIndex(Number(e.target.value))}>
-          {backendDevices.map((i) => <option key={i} value={i}>{`Cam ${i}`}</option>)}
-        </select>
-
         {/* Mode Toggles */}
         <div style={{ display: "flex", background: "#f3f4f6", padding: 4, borderRadius: 6 }}>
           <button
@@ -224,12 +250,48 @@ const ConditionMonitoring: React.FC = () => {
             AI Model
           </button>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontWeight: "bold", fontSize: 13, color: "#333" }}>Camera:</span>
+          <select 
+            value={selectedBackendIndex} 
+            onChange={(e) => setSelectedBackendIndex(Number(e.target.value))}
+            style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontWeight: "bold", cursor: "pointer" }}
+          >
+            {backendDevices.map((i) => <option key={i} value={i}>{`Cam ${i}`}</option>)}
+          </select>
+        </div>
 
-        <button onClick={startCamera} disabled={busy || cameraOn} style={{ background: "#16a34a", color: "#fff", padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer" }}>
-          Start Recording
+        <button
+          onClick={cameraOn ? stopCamera : startCamera}
+          disabled={busy}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 6,
+            border: "none",
+            fontWeight: "bold",
+            cursor: busy ? "not-allowed" : "pointer",
+            background: busy ? "#ccc" : cameraOn ? "#dc2626" : "#16a34a",
+            color: "#fff",
+          }}
+        >
+          {cameraOn ? "⏹ Stop Camera" : "▶ Start Camera"}
         </button>
-        <button onClick={stopCamera} disabled={busy || !cameraOn} style={{ background: "#dc2626", color: "#fff", padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer" }}>
-          Stop Recording
+
+        <button
+          onClick={recording ? stopRecording : startRecording}
+          disabled={busy || !cameraOn}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 6,
+            border: "none",
+            fontWeight: "bold",
+            cursor: (busy || !cameraOn) ? "not-allowed" : "pointer",
+            background: (busy || !cameraOn) ? "#ccc" : recording ? "#f97316" : "#eab308",
+            color: "#fff",
+            opacity: !cameraOn ? 0.5 : 1,
+          }}
+        >
+          {recording ? "⏹ Stop Recording" : "🔴 Start Recording"}
         </button>
         <button onClick={reloadStream} style={{ background: "#6b7280", color: "#fff", padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer" }}>
           Reload

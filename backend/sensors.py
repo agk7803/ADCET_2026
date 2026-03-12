@@ -104,6 +104,8 @@ _ser: Optional[serial.Serial] = None
 _log_file = None
 _video_writer1 = None
 _video_writer2 = None
+_writer1_shape = None
+_writer2_shape = None
 _record_start_time = 0
 _current_session_id: Optional[int] = None
 
@@ -551,9 +553,17 @@ def _add_alert(category: str, msg: str, dist_y: float):
 # ------------------------------------------------------------------------------
 
 def _ensure_directories():
-    # root = os.path.join(os.getcwd(), "data")
     root = config.STORAGE_DIR
-    subdirs = ["Acceleration", "RearWindow", "RailCondition", "TrackGeometry", "Recordings", "Infringements"]
+    subdirs = [
+        "Acceleration", 
+        "video_recording/RearWindow", 
+        "video_recording/RailCondition", 
+        "video_recording/TrackGeometry", 
+        "video_recording/RailProfile",
+        "video_recording/ConditionMonitoring",
+        "Recordings", 
+        "Infringements"
+    ]
     for d in subdirs:
         path = os.path.join(root, d)
         os.makedirs(path, exist_ok=True)
@@ -565,6 +575,7 @@ def record_frame(cam_index, frame):
     Initializing writers on the fly to handle dynamic resolution.
     """
     global _video_writer1, _video_writer2, _recording
+    global _writer1_shape, _writer2_shape
 
     if not _recording:
         return
@@ -573,7 +584,7 @@ def record_frame(cam_index, frame):
     def init_writer(outfile):
         h, w = frame.shape[:2]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        return cv2.VideoWriter(outfile, fourcc, 30.0, (w, h))
+        return cv2.VideoWriter(outfile, fourcc, 30.0, (w, h)), (w, h)
 
     root = _ensure_directories()
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -581,18 +592,25 @@ def record_frame(cam_index, frame):
     # Lazy init writers
     if cam_index == 0: # RearWindow
         if _video_writer1 is None:
-            # User Correction: Save RearWindow cam to RearWindow folder
-            # per request: /Users/atharvakolhe/Desktop/projcopy/project/backend/data/RearWindow
-            path = os.path.join(root, "RearWindow", f"cam0_rear_{ts}.mp4")
-            _video_writer1 = init_writer(path)
+            path = os.path.join(root, "video_recording", "RearWindow", f"cam0_rear_{ts}.mp4")
+            _video_writer1, _writer1_shape = init_writer(path)
             logger.info(f"Recording Cam 0 to {path}")
+        
+        # Resize if camera resolution changed mid-stream
+        if frame.shape[:2] != (_writer1_shape[1], _writer1_shape[0]):
+            frame = cv2.resize(frame, _writer1_shape)
+            
         _video_writer1.write(frame)
         
     elif cam_index == 1: # RailCondition / Profile
         if _video_writer2 is None:
-            path = os.path.join(root, "RailCondition", f"cam1_{ts}.mp4")
-            _video_writer2 = init_writer(path)
+            path = os.path.join(root, "video_recording", "RailCondition", f"cam1_{ts}.mp4")
+            _video_writer2, _writer2_shape = init_writer(path)
             logger.info(f"Recording Cam 1 to {path}")
+            
+        if frame.shape[:2] != (_writer2_shape[1], _writer2_shape[0]):
+            frame = cv2.resize(frame, _writer2_shape)
+            
         _video_writer2.write(frame)
     
     # Example logic for other cameras if needed
@@ -620,8 +638,11 @@ def start_recording(file_prefix="session"):
         logger.error(f"Failed to open log file: {e}")
 
     # Reset video writers so they re-init with new files
+    global _writer1_shape, _writer2_shape
     _video_writer1 = None
     _video_writer2 = None
+    _writer1_shape = None
+    _writer2_shape = None
     
     _recording = True
     logger.info(f"Recording started. Log: {filename}")
@@ -641,6 +662,7 @@ def start_recording(file_prefix="session"):
 
 def stop_recording():
     global _recording, _log_file, _video_writer1, _video_writer2
+    global _writer1_shape, _writer2_shape
     _recording = False
     
     if _log_file:
@@ -650,10 +672,12 @@ def stop_recording():
     if _video_writer1:
         _video_writer1.release()
         _video_writer1 = None
+        _writer1_shape = None
         
     if _video_writer2:
         _video_writer2.release()
         _video_writer2 = None
+        _writer2_shape = None
 
     global _infringement_file
     if _infringement_file:
