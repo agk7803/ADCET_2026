@@ -18,9 +18,13 @@ def get_available_cameras(max_tested=4):
     available = []
     failed_attempts = 0
     for i in range(max_tested):
-        # Mute ffmpeg warnings during probe
-        cv2.setLogLevel(0) 
-        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW) if sys.platform.startswith('win') else cv2.VideoCapture(i)
+        if sys.platform.startswith('win'):
+            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+        elif sys.platform == 'darwin':
+            cap = cv2.VideoCapture(i, cv2.CAP_AVFOUNDATION)
+        else:
+            cap = cv2.VideoCapture(i)
+        
         if cap.isOpened():
             ret, _ = cap.read()
             if ret:
@@ -36,7 +40,13 @@ def get_available_cameras(max_tested=4):
 class VideoCamera:
     def __init__(self, index):
         self.index = index
-        self.video = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        if sys.platform.startswith('win'):
+            self.video = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        elif sys.platform == 'darwin':
+            self.video = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
+        else:
+            self.video = cv2.VideoCapture(index)
+            
         if not self.video.isOpened():
              self.video = cv2.VideoCapture(index)
         

@@ -291,6 +291,10 @@ def export_acceleration_data(req: AccelExportRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Video Feeds
+@router.get("/video_feed")
+def video_feed(index: int = 0):
+    return StreamingResponse(cv_service.camera_manager.get_stream(index), media_type="multipart/x-mixed-replace; boundary=frame")
+
 @router.get("/video_feed_geometry")
 def video_feed_geometry(index: int = 3):
     # Left Frame: Raw Feed (as requested "output of webcam")

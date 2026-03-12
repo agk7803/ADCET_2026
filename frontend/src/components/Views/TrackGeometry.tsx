@@ -82,15 +82,22 @@ export default function TrackGeometry() {
   }, [cameraOn]);
 
   const [cameras, setCameras] = useState<any[]>([]);
-  const [leftCamIndex, setLeftCamIndex] = useState(3); // Default Iriun
-  const [rightCamIndex, setRightCamIndex] = useState(1); // Default Profile/OBS
+  const [leftCamIndex, setLeftCamIndex] = useState(0); 
+  const [rightCamIndex, setRightCamIndex] = useState(0); 
 
   useEffect(() => {
     // Fetch available cameras
     fetch(`${API_BASE}/camera/list`)
       .then(res => res.json())
       .then(data => {
-        if (data.cameras) setCameras(data.cameras);
+        if (data.cameras) {
+            setCameras(data.cameras);
+            // Default sensibly based on availability instead of hardcoded numbers
+            if (data.cameras.length > 0) {
+                setLeftCamIndex(data.cameras[0].index);
+                setRightCamIndex(data.cameras.length > 1 ? data.cameras[1].index : data.cameras[0].index);
+            }
+        }
       })
       .catch(err => console.error("Failed to list cameras", err));
   }, []);

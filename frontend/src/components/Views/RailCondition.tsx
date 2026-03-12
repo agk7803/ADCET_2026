@@ -23,7 +23,7 @@ export default function RailCondition() {
   const [threshold, setThreshold] = useState(220); // Default threshold
 
   // Camera State
-  const [selectedCamIndex, setSelectedCamIndex] = useState(2);
+  const [selectedCamIndex, setSelectedCamIndex] = useState(0);
   const [availableCameras, setAvailableCameras] = useState<number[]>([]);
 
   useEffect(() => {
@@ -34,6 +34,9 @@ export default function RailCondition() {
         if (data.cameras && Array.isArray(data.cameras)) {
           const indices = data.cameras.map((c: any) => c.index).filter((i: any) => typeof i === 'number');
           setAvailableCameras(indices);
+          if (indices.length > 0) {
+              setSelectedCamIndex(indices[0]);
+          }
         }
       })
       .catch(e => console.error("Failed to list cameras", e));
@@ -193,7 +196,6 @@ export default function RailCondition() {
             onChange={(e) => setSelectedCamIndex(Number(e.target.value))}
             className="flex-1 p-2 border rounded text-sm"
           >
-            <option value={2}>Default (Index 2)</option>
             {availableCameras.map(i => (
               <option key={i} value={i}>Camera Index {i}</option>
             ))}

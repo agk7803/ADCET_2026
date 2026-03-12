@@ -13,8 +13,7 @@ const ConditionMonitoring: React.FC = () => {
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
-  // Backend index (default blank -> server uses PROFILE_CAMERA_INDEX or default)
-  const [selectedBackendIndex, setSelectedBackendIndex] = useState<number | "">("");
+  const [selectedBackendIndex, setSelectedBackendIndex] = useState<number>(2);
 
   // AI / Laser Mode State
   const [analysisMode, setAnalysisMode] = useState<"laser" | "ai">("laser");
@@ -64,8 +63,9 @@ const ConditionMonitoring: React.FC = () => {
           // try to map to indices if backend returns objects
           if (Array.isArray(j.cameras)) {
             const indices = j.cameras.map((c: any) => c.index).filter((x: any) => typeof x === "number");
-            setBackendDevices(indices);
-            if (indices.length > 0 && selectedBackendIndex === "") setSelectedBackendIndex(indices[0]);
+            if (indices.length > 0) {
+                setSelectedBackendIndex(indices[0]);
+            }
           }
         }
       } catch (e) {
@@ -126,7 +126,7 @@ const ConditionMonitoring: React.FC = () => {
       try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { }
 
       // 4. Start Camera Hardware
-      const body = { index: selectedBackendIndex === "" ? 2 : Number(selectedBackendIndex) };
+      const body = { index: selectedBackendIndex };
       await fetch(`${API_BASE}/camera/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -156,7 +156,7 @@ const ConditionMonitoring: React.FC = () => {
       await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
 
       // 3. Stop Camera Hardware
-      const body = { index: selectedBackendIndex === "" ? 2 : Number(selectedBackendIndex) };
+      const body = { index: selectedBackendIndex };
       await fetch(`${API_BASE}/camera/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,8 +193,7 @@ const ConditionMonitoring: React.FC = () => {
 
       {/* Control Bar */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        <select value={selectedBackendIndex} onChange={(e) => setSelectedBackendIndex(e.target.value === "" ? "" : Number(e.target.value))}>
-          <option value="">Camera Index (Default: 2)</option>
+        <select value={selectedBackendIndex} onChange={(e) => setSelectedBackendIndex(Number(e.target.value))}>
           {backendDevices.map((i) => <option key={i} value={i}>{`Cam ${i}`}</option>)}
         </select>
 
@@ -261,7 +260,7 @@ const ConditionMonitoring: React.FC = () => {
           {cameraOn ? (
             <img
               key={`raw-${reloadKey}`}
-              src={`${API_BASE}/video_feed?index=${selectedBackendIndex === "" ? 2 : selectedBackendIndex}&cache=${reloadKey}`}
+              src={`${API_BASE}/video_feed?index=${selectedBackendIndex}&cache=${reloadKey}`}
               alt="Raw Feed"
               style={{ width: "100%", height: "auto", display: "block" }}
             />
@@ -279,8 +278,8 @@ const ConditionMonitoring: React.FC = () => {
             <img
               key={`proc-${reloadKey}`}
               src={analysisMode === "ai"
-                ? `${API_BASE}/video_feed_yolo?index=${selectedBackendIndex === "" ? 2 : selectedBackendIndex}&cache=${reloadKey}`
-                : `${API_BASE}/video_feed_condition_overlay?index=${selectedBackendIndex === "" ? 2 : selectedBackendIndex}&cache=${reloadKey}`
+                ? `${API_BASE}/video_feed_yolo?index=${selectedBackendIndex}&cache=${reloadKey}`
+                : `${API_BASE}/video_feed_condition_overlay?index=${selectedBackendIndex}&cache=${reloadKey}`
               }
               alt="Processed Feed"
               style={{ width: "100%", height: "auto", display: "block" }}
