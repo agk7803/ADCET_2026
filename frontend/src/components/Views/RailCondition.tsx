@@ -34,10 +34,23 @@ export default function RailCondition() {
       .then(res => res.json())
       .then(data => {
         if (data.cameras && Array.isArray(data.cameras)) {
-          const indices = data.cameras.map((c: any) => c.index).filter((i: any) => typeof i === 'number');
+          let indices = data.cameras.map((c: any) => c.index).filter((i: any) => typeof i === 'number');
+          
+          // Guarantee that 0, 1, 2 are always available
+          const forcedIndices = [0, 1, 2];
+          forcedIndices.forEach(idx => {
+            if (!indices.includes(idx)) {
+              indices.push(idx);
+            }
+          });
+          
+          // Sort to look nice
+          indices.sort((a: number, b: number) => a - b);
+          
           setAvailableCameras(indices);
           if (indices.length > 0) {
-              setSelectedCamIndex(indices[0]);
+              // preserve current selected index if valid, else default to first
+              setSelectedCamIndex(prev => indices.includes(prev) ? prev : indices[0]);
           }
         }
       })

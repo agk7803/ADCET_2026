@@ -7,7 +7,7 @@ from scipy.special import comb
 from ultralytics import YOLO
 import threading
 import json
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, IO
 from datetime import datetime
 
 from backend.core import config
@@ -74,13 +74,13 @@ class TrackGeometryProcessor:
         self.first = True
         
         self.recording = False
-        self.writer = None
+        self.writer: Optional[cv2.VideoWriter] = None
         
         self.latest_gauge = 0.0 # Store latest for API
         
         # CSV Logging for Gauge
-        self.log_file = None
-        self.csv_writer = None
+        self.log_file: Optional[IO[str]] = None
+        self.csv_writer: Optional[Any] = None
         self.filename = ""
         self.setup_csv()
 
@@ -148,7 +148,7 @@ class TrackGeometryProcessor:
         roi_h, roi_w = conv_frame.shape
         
         count = 0
-        for i in range(340, 40, -slide_interval):
+        for i in range(340, 40, -int(slide_interval)):
             if i + slide_height > roi_h: continue
 
             sw0 = max(0, min(sliding_window[0], roi_w))
@@ -166,7 +166,7 @@ class TrackGeometryProcessor:
                 l_idx = sliding_window[0] + left_edge.argmax()
                 left_points.append([l_idx, i + int(slide_height / 2)])
                 # Update window
-                sw_diff = int(slide_width / 4 + (slide_width + 10) / (count + 1))
+                sw_diff = int(slide_width / 4 + (slide_width + 10) / int(count + 1))
                 sliding_window[0] = max(0, l_idx - sw_diff)
                 sliding_window[1] = min(roi_w, l_idx + sw_diff)
 
@@ -275,7 +275,7 @@ class TrackGeometryProcessor:
 class RailProfileProcessor:
     def __init__(self, threshold=200):
         self.threshold = threshold
-        self.writer = None
+        self.writer: Optional[cv2.VideoWriter] = None
         self.recording = False
         self.filename = ""
 
@@ -339,8 +339,8 @@ class RailConditionProcessor:
         self.threshold = threshold
         self.blur_size = blur_size
         self.recording = False
-        self.writer_overlay = None
-        self.writer_mask = None
+        self.writer_overlay: Optional[cv2.VideoWriter] = None
+        self.writer_mask: Optional[cv2.VideoWriter] = None
         self.filename_overlay = ""
         self.filename_mask = ""
         self.lock = threading.Lock()
@@ -424,13 +424,13 @@ class RailConditionProcessor:
 # ------------------------------------------------------------------------------
 class YoloProcessor:
     def __init__(self, model_path=None, get_chainage_callback=None):
-        self.model = None
-        self.model_path = None
-        self.names = {}
+        self.model: Optional[Any] = None
+        self.model_path: Optional[str] = None
+        self.names: Dict[int, str] = {}
         self.get_chainage_callback = get_chainage_callback
         
         self.recording = False
-        self.writer = None
+        self.writer: Optional[cv2.VideoWriter] = None
         self.output_dir = ensure_dirs("ConditionMonitoring")
         self.filename = ""
         

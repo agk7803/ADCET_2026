@@ -343,7 +343,7 @@ def _classify_distance(dist_m: float, uml: float, pml: float) -> str:
     return "CBML"
 
 def _process_data(data: Dict[str, Any]):
-    global _current_data, _robot_y, _last_encoder_steps, _encoder_steps, _infringement_file, _reset_next_sample
+    global _current_data, _robot_y, _last_encoder_steps, _encoder_steps, _infringement_file, _reset_next_sample, _packet_count
 
     timestamp = time.time()
     data["timestamp"] = timestamp
@@ -392,7 +392,7 @@ def _process_data(data: Dict[str, Any]):
     _check_thresholds(data, _robot_y)
     
     with _slam_lock:
-        _robot_y += dist_delta
+        _robot_y += dist_delta  # pyre-ignore[58]
         _last_encoder_steps = steps
         _encoder_steps = steps
         
@@ -502,7 +502,7 @@ def _process_data(data: Dict[str, Any]):
 
     # 3. Broadcast to WebSockets
     global _packet_count
-    _packet_count += 1
+    _packet_count += 1  # pyre-ignore[58]
     if _packet_count % 50 == 0:
         logger.info(f"Telemetry Heartbeat: Broadcasted {_packet_count} packets. Current Y: {processed_point['y']:.3f}m")
 
@@ -600,7 +600,8 @@ def record_frame(cam_index, frame):
         if frame.shape[:2] != (_writer1_shape[1], _writer1_shape[0]):
             frame = cv2.resize(frame, _writer1_shape)
             
-        _video_writer1.write(frame)
+        if _video_writer1 is not None:
+            _video_writer1.write(frame)
         
     elif cam_index == 1: # RailCondition / Profile
         if _video_writer2 is None:
@@ -611,7 +612,8 @@ def record_frame(cam_index, frame):
         if frame.shape[:2] != (_writer2_shape[1], _writer2_shape[0]):
             frame = cv2.resize(frame, _writer2_shape)
             
-        _video_writer2.write(frame)
+        if _video_writer2 is not None:
+            _video_writer2.write(frame)
     
     # Example logic for other cameras if needed
     # else:

@@ -11,6 +11,7 @@ logger = logging.getLogger("itms.db_service")
 
 class SessionDatabase:
     def __init__(self, db_path: Optional[str] = None):
+        self.db_path: str
         if db_path is None:
             # Ensure storage directory exists
             os.makedirs(config.STORAGE_DIR, exist_ok=True)
@@ -117,6 +118,16 @@ class SessionDatabase:
             conn.close()
             logger.info("Database background worker stopped")
 
+    def _exec_start_session(self, conn, payload):
+        """Execute a start session task from the worker queue."""
+        start_time = time.time()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO sessions (start_time, data_source) VALUES (?, ?)",
+            (start_time, payload.get('data_source', 'UNKNOWN'))
+        )
+        conn.commit()
+
     def start_session(self, data_source: str) -> int:
         """Synchronously create a session to get the ID, then return it."""
         # Note: Session start is sync to ensure we have an ID for subsequent telemetry
@@ -128,6 +139,7 @@ class SessionDatabase:
                 (start_time, data_source)
             )
             session_id = cursor.lastrowid
+            assert session_id is not None, "Failed to create session"
             conn.commit()
         logger.info(f"Started new session {session_id} (Source: {data_source})")
         return session_id

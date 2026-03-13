@@ -62,10 +62,24 @@ const ConditionMonitoring: React.FC = () => {
         if (r.ok) {
           const j = await r.json();
           if (Array.isArray(j.cameras)) {
-            const indices = j.cameras.map((c: any) => c.index).filter((x: any) => typeof x === "number");
+            let indices = j.cameras.map((c: any) => c.index).filter((x: any) => typeof x === "number");
+            
+            // Guarantee that 0, 1, 2 are always available
+            const forcedIndices = [0, 1, 2];
+            forcedIndices.forEach(idx => {
+              if (!indices.includes(idx)) {
+                indices.push(idx);
+              }
+            });
+            
+            // Sort to look nice
+            indices.sort((a: number, b: number) => a - b);
+            
+            setBackendDevices(indices);
+            
             if (indices.length > 0) {
-                setBackendDevices(indices);
-                setSelectedBackendIndex(indices[0]);
+                // preserve current selected index if valid, else default to first
+                setSelectedBackendIndex(prev => indices.includes(prev) ? prev : indices[0]);
             }
           }
         }

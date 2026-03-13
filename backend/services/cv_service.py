@@ -3,7 +3,7 @@ import numpy as np
 import threading
 import time
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from backend.core import config
 from backend import sensors
@@ -52,7 +52,7 @@ def get_available_cameras(max_tested=10):
 class VideoCamera:
     def __init__(self, index):
         self.index = index
-        self.video = None
+        self.video: Optional[cv2.VideoCapture] = None
         self.lock = threading.Lock()
         self.last_frame = None
         self.last_frame_raw = None
@@ -72,8 +72,8 @@ class VideoCamera:
 
     def stop(self):
         self.running = False
-        if self.video and self.video.isOpened():
-            self.video.release()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=3.0)
 
     def _update(self):
         # Open camera in the background thread!
@@ -85,19 +85,19 @@ class VideoCamera:
             else:
                 self.video = cv2.VideoCapture(self.index)
                 
-            if not self.video.isOpened():
+            if not self.video.isOpened():  # pyre-ignore[16]
                  self.video = cv2.VideoCapture(self.index)
             
-            if self.video.isOpened():
-                self.video.set(cv2.CAP_PROP_FPS, 30)
+            if self.video.isOpened():  # pyre-ignore[16]
+                self.video.set(cv2.CAP_PROP_FPS, 30)  # pyre-ignore[16]
         except Exception as e:
             logger.error(f"Failed to open camera {self.index}: {e}")
             self.running = False
             return
 
         while self.running:
-            if self.video and self.video.isOpened():
-                ret, frame = self.video.read()
+            if self.video and self.video.isOpened():  # pyre-ignore[16]
+                ret, frame = self.video.read()  # pyre-ignore[16]
                 if ret:
                     try:
                         sensors.record_frame(self.index, frame)
@@ -115,6 +115,11 @@ class VideoCamera:
                  time.sleep(1)
             time.sleep(0.01)
 
+        # Cleanup: Release the camera cleanly OUTSIDE the loop, in the correct thread
+        if self.video and self.video.isOpened():  # pyre-ignore[16]
+            self.video.release()  # pyre-ignore[16]
+            self.video = None
+
     def get_frame(self):
         with self.lock:
             return self.last_frame
@@ -125,7 +130,7 @@ class VideoCamera:
 
 class CameraManager:
     def __init__(self):
-        self.cameras = {}
+        self.cameras: Dict[int, VideoCamera] = {}
         self.lock = threading.Lock()
 
     def get_stream(self, index):
@@ -147,11 +152,17 @@ class CameraManager:
         finally:
             with self.lock:
                 if index in self.cameras:
-                    camera = self.cameras[index]
-                    camera.clients -= 1
-                    if camera.clients <= 0:
-                        camera.stop()
+                    cam = self.cameras[index]
+                    cam.clients -= 1
+                    if cam.clients <= 0:
+                        cam.stop()
                         del self.cameras[index]
+
+    def force_stop(self, index):
+        with self.lock:
+            if index in self.cameras:
+                self.cameras[index].stop()
+                del self.cameras[index]  # pyre-ignore[55]
 
 camera_manager = CameraManager()
 
@@ -186,7 +197,7 @@ def generate_track_geometry_feed(index_source=1):
                 camera_manager.cameras[index_source].clients -= 1
                 if camera_manager.cameras[index_source].clients <= 0:
                     camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]
+                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_mask_feed(index_source=1):
     with camera_manager.lock:
@@ -212,7 +223,7 @@ def generate_mask_feed(index_source=1):
                 camera_manager.cameras[index_source].clients -= 1
                 if camera_manager.cameras[index_source].clients <= 0:
                     camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]
+                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_yolo_feed(index_source=2):
     with camera_manager.lock:
@@ -237,7 +248,7 @@ def generate_yolo_feed(index_source=2):
                 camera_manager.cameras[index_source].clients -= 1
                 if camera_manager.cameras[index_source].clients <= 0:
                     camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]
+                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_rail_ai_feed(index_source=2):
     with camera_manager.lock:
@@ -265,7 +276,7 @@ def generate_rail_ai_feed(index_source=2):
                 camera_manager.cameras[index_source].clients -= 1
                 if camera_manager.cameras[index_source].clients <= 0:
                     camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]
+                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_condition_feed_overlay(index_source=1):
     with camera_manager.lock:
@@ -292,7 +303,7 @@ def generate_condition_feed_overlay(index_source=1):
                 camera_manager.cameras[index_source].clients -= 1
                 if camera_manager.cameras[index_source].clients <= 0:
                     camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]
+                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_condition_feed_mask(index_source=1):
     with camera_manager.lock:
@@ -318,4 +329,4 @@ def generate_condition_feed_mask(index_source=1):
                 camera_manager.cameras[index_source].clients -= 1
                 if camera_manager.cameras[index_source].clients <= 0:
                     camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]
+                    del camera_manager.cameras[index_source]  # pyre-ignore[55]

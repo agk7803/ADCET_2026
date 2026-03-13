@@ -45,6 +45,9 @@ class ThresholdUpdate(BaseModel):
 class ModelSelect(BaseModel):
     path: str
 
+class CameraControl(BaseModel):
+    index: int
+
 class SensorVector(BaseModel):
     x: float
     y: float
@@ -434,13 +437,14 @@ def reset_system():
     return {"status": "success", "message": "System reset"}
 
 @router.post("/camera/start")
-def start_camera():
-    # In this modular version, camera manager handles lifecycle
-    return {"status": "camera_ready"}
+def start_camera(req: CameraControl):
+    # Camera generation handles lifecycle automatically
+    return {"status": "camera_ready", "index": req.index}
 
 @router.post("/camera/stop")
-def stop_camera():
-    return {"status": "camera_stopped"}
+def stop_camera(req: CameraControl):
+    cv_service.camera_manager.force_stop(req.index)
+    return {"status": "camera_stopped", "index": req.index}
 
 @router.get("/video_feed_face")
 def video_feed_face(index: int = 0):

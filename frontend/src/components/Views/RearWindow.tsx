@@ -74,13 +74,25 @@ const RearWindow: React.FC = () => {
 
           if (Array.isArray(j.cameras)) {
 
-            const indices = j.cameras
+            let indices = j.cameras
               .map((c: any) => c.index)
               .filter((x: any) => typeof x === "number");
 
+            // Guarantee that 0, 1, 2 are always available
+            const forcedIndices = [0, 1, 2];
+            forcedIndices.forEach(idx => {
+              if (!indices.includes(idx)) {
+                indices.push(idx);
+              }
+            });
+
+            // Sort to look nice
+            indices.sort((a: number, b: number) => a - b);
+
             if (indices.length) {
               setCameraList(indices);
-              setCameraIndex(indices[0]);
+              // preserve current selected index if valid, else default to first
+              setCameraIndex(prev => indices.includes(prev) ? prev : indices[0]);
             }
 
           }
