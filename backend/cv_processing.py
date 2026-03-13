@@ -17,7 +17,7 @@ logger = logging.getLogger("cv_processing")
 
 def init_writer(path, fps=20.0, resolution=(640, 480)):
     try:
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         writer = cv2.VideoWriter(path, fourcc, fps, resolution)
         if not writer.isOpened():
             logger.error(f"Failed to open VideoWriter at {path}")
@@ -445,6 +445,10 @@ class YoloProcessor:
         
         self.lock = threading.Lock()
         
+        # CSV Logging for Defects - moved to start_recording for per-run
+        self.log_file: Optional[IO[str]] = None
+        self.csv_writer: Optional[Any] = None
+        
         if model_path:
             self.load_model(model_path)
 
@@ -524,6 +528,18 @@ class YoloProcessor:
                     cv2.rectangle(processed, (x1, y1 - 20), (x1 + t_size[0], y1), color, -1)
                     cv2.putText(processed, text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
+                    # Log to CSV if it's a defect
+                    if is_defect and self.csv_writer:
+                        try:
+                            chainage = 0.0
+                            if self.get_chainage_callback:
+                                chainage = self.get_chainage_callback()
+                            ts = time.strftime("%H:%M:%S")
+                            self.csv_writer.writerow([ts, f"{chainage:.3f}", label, f"{conf:.2f}", x1, y1, x2, y2])
+                            self.log_file.flush()
+                        except Exception as e:
+                            logger.error(f"Error logging defect to CSV: {e}")
+
         # 3. Chainage Overlay
         if self.get_chainage_callback:
             try:
@@ -544,15 +560,28 @@ class YoloProcessor:
 
     def start_recording(self):
         with self.lock:
-            # Create date-wise folder on desktop
+            # Create per-run folder on desktop with start time
             desktop_path = os.path.expanduser("~/Desktop")
             report_dir = os.path.join(desktop_path, "report")
-            date_str = time.strftime("%Y-%m-%d")
-            date_dir = os.path.join(report_dir, date_str)
-            os.makedirs(date_dir, exist_ok=True)
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            run_dir = os.path.join(report_dir, ts)
+            os.makedirs(run_dir, exist_ok=True)
             
-            ts = time.strftime("%H%M%S")
-            self.filename = os.path.join(date_dir, f"condition_monitoring_{ts}.mp4")
+            # Video file
+            self.filename = os.path.join(run_dir, f"condition_monitoring.avi")
+            
+            # CSV file
+            try:
+                csv_path = os.path.join(run_dir, "yolo_defects.csv")
+                self.log_file = open(csv_path, 'w', newline='')
+                self.csv_writer = csv.writer(self.log_file)
+                self.csv_writer.writerow(["Timestamp", "Chainage", "Defect_Class", "Confidence", "X1", "Y1", "X2", "Y2"])
+                logger.info(f"YOLO defects log created: {csv_path}")
+            except Exception as e:
+                logger.error(f"Failed to create YOLO CSV: {e}")
+                self.log_file = None
+                self.csv_writer = None
+            
             self.recording = True
             self.writer = None # Lazy init
 
@@ -566,6 +595,15 @@ class YoloProcessor:
                     logger.error(f"Error releasing YOLO writer: {e}")
                 finally:
                     self.writer = None
+            # Close CSV log
+            if self.log_file:
+                try:
+                    self.log_file.close()
+                except Exception as e:
+                    logger.error(f"Error closing YOLO CSV: {e}")
+                finally:
+                    self.log_file = None
+                    self.csv_writer = None
 
     def record_frame_check(self, frame):
         if self.recording:
