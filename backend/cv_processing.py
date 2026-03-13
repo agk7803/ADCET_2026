@@ -250,8 +250,12 @@ class TrackGeometryProcessor:
     def stop_recording(self):
         self.recording = False
         if self.writer:
-            self.writer.release()
-            self.writer = None
+            try:
+                self.writer.release()
+            except Exception as e:
+                logger.error(f"Error releasing geometry writer: {e}")
+            finally:
+                self.writer = None
 
     def record_frame_check(self, frame):
         # Helper called internally or externally to push frame to writer
@@ -322,8 +326,12 @@ class RailProfileProcessor:
     def stop_recording(self):
         self.recording = False
         if self.writer is not None:
-            self.writer.release()
-            self.writer = None
+            try:
+                self.writer.release()
+            except Exception as e:
+                logger.error(f"Error releasing profile writer: {e}")
+            finally:
+                self.writer = None
 # ------------------------------------------------------------------------------
 # RAIL CONDITION MONITORING PROCESSOR
 # ------------------------------------------------------------------------------
@@ -406,11 +414,19 @@ class RailConditionProcessor:
         self.recording = False
         with self.lock: # If lock exists
             if self.writer_overlay is not None:
-                self.writer_overlay.release()
-                self.writer_overlay = None
+                try:
+                    self.writer_overlay.release()
+                except Exception as e:
+                    logger.error(f"Error releasing overlay writer: {e}")
+                finally:
+                    self.writer_overlay = None
             if self.writer_mask is not None:
-                self.writer_mask.release()
-                self.writer_mask = None
+                try:
+                    self.writer_mask.release()
+                except Exception as e:
+                    logger.error(f"Error releasing mask writer: {e}")
+                finally:
+                    self.writer_mask = None
 
 # ------------------------------------------------------------------------------
 # YOLO PROCESSOR
@@ -528,8 +544,15 @@ class YoloProcessor:
 
     def start_recording(self):
         with self.lock:
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            self.filename = os.path.join(self.output_dir, f"ai_detection_{ts}.avi")
+            # Create date-wise folder on desktop
+            desktop_path = os.path.expanduser("~/Desktop")
+            report_dir = os.path.join(desktop_path, "report")
+            date_str = time.strftime("%Y-%m-%d")
+            date_dir = os.path.join(report_dir, date_str)
+            os.makedirs(date_dir, exist_ok=True)
+            
+            ts = time.strftime("%H%M%S")
+            self.filename = os.path.join(date_dir, f"condition_monitoring_{ts}.mp4")
             self.recording = True
             self.writer = None # Lazy init
 
@@ -537,8 +560,12 @@ class YoloProcessor:
         with self.lock:
             self.recording = False
             if self.writer:
-                self.writer.release()
-                self.writer = None
+                try:
+                    self.writer.release()
+                except Exception as e:
+                    logger.error(f"Error releasing YOLO writer: {e}")
+                finally:
+                    self.writer = None
 
     def record_frame_check(self, frame):
         if self.recording:
