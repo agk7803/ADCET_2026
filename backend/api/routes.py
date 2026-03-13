@@ -8,6 +8,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Bo
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+
 from backend import sensors
 from fastapi.responses import FileResponse
 from backend import simulator
@@ -239,14 +240,25 @@ def get_session_report(session_id: int):
         logger.error(f"Error generating report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/report/generate")
-def generate_report():
-    """Generate a PDF report from the current session folder."""
+@router.api_route("/export-report", methods=["GET", "POST"])
+def export_report():
+
     try:
-        pdf_path = report_service.report_gen.generate_folder_report()
-        return {"status": "generated", "file": pdf_path}
+        session_dir = report_session.get_report_dir()
+
+        pdf_path = report_service.report_gen.generate_folder_report(session_dir)
+
+        if not os.path.exists(pdf_path):
+            raise Exception("PDF not generated")
+
+        return FileResponse(
+            path=pdf_path,
+            media_type="application/pdf",
+            filename="session_report.pdf"
+        )
+
     except Exception as e:
-        logger.error(f"Error generating report: {e}")
+        logger.error(f"Report generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sessions/{session_id}/export/csv")

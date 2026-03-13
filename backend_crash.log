@@ -1,0 +1,49 @@
+[config] BASE_DIR: /Users/atharvakolhe/Desktop/ADCET_2026/backend
+[config] STORAGE_DIR: /Users/atharvakolhe/Desktop/storage
+2026-03-14 02:59:31,872 [INFO] itms: Logging initialized at level INFO
+/Users/atharvakolhe/Desktop/ADCET_2026/backend/server.py:32: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+/Users/atharvakolhe/Desktop/ADCET_2026/backend/server.py:38: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+2026-03-14 02:59:31,903 [INFO] itms: Logging initialized at level INFO
+INFO:     Started server process [70539]
+INFO:     Waiting for application startup.
+2026-03-14 02:59:31,910 [INFO] itms: Starting up ITMS Backend...
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-03-14 02:59:33,872 [INFO] itms.sensors: Using manually configured serial port: /dev/cu.usbserial-0001
+2026-03-14 02:59:33,873 [INFO] itms.sensors: Started acquisition on /dev/cu.usbserial-0001 @ 115200
+2026-03-14 02:59:33,875 [INFO] itms.db_service: Started new session 80 (Source: SERIAL)
+2026-03-14 02:59:33,875 [INFO] itms.sensors: Database session started: 80
+2026-03-14 02:59:33,875 [INFO] itms.report_session: Report session started: /Users/atharvakolhe/Desktop/report/20260314_025933
+INFO:     127.0.0.1:63410 - "POST /connect HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63412 - "POST /camera/start HTTP/1.1" 200 OK
+2026-03-14 02:59:33,885 [INFO] itms.sensors: Recording started. Log: /Users/atharvakolhe/Desktop/storage/sessions/20260314_025933/Acceleration/session_20260314_025933_serial.csv
+2026-03-14 02:59:33,885 [INFO] itms.sensors: Recording started. Log: /Users/atharvakolhe/Desktop/storage/sessions/20260314_025933/Acceleration/session_20260314_025933_serial.csv
+INFO:     127.0.0.1:63414 - "POST /recording/start HTTP/1.1" 200 OK
+2026-03-14 02:59:33,888 [INFO] cv_processing: YOLO defects log created: /Users/atharvakolhe/Desktop/report/20260314_025933/yolo_defects.csv
+INFO:     127.0.0.1:63416 - "POST /recording/condition/start HTTP/1.1" 200 OK
+2026-03-14 02:59:33,900 [INFO] itms.sensors: Connected to /dev/cu.usbserial-0001
+2026-03-14 02:59:34,007 [INFO] itms.sensors: Dead Reckoning: GPS origin captured at (16.940880, 74.417664)
+2026-03-14 02:59:38,900 [INFO] itms.sensors: Recording stopped.
+INFO:     127.0.0.1:63418 - "POST /recording/stop HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63420 - "POST /recording/condition/stop HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63422 - "POST /camera/stop HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2026-03-14 02:59:41,112 [INFO] itms: Shutting down ITMS Backend...
+2026-03-14 02:59:41,802 [INFO] itms.sensors: Database session stopped: 80
+2026-03-14 02:59:41,802 [INFO] itms.sensors: Stopped acquisition.
+2026-03-14 02:59:41,802 [INFO] itms.sensors: Recording stopped.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [70539]
