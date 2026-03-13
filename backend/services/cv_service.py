@@ -13,10 +13,13 @@ logger = logging.getLogger("itms.cv_service")
 
 import sys
 
-def get_available_cameras(max_tested=4):
-    """Quickly probe the first few indices to see which hardware cameras are connected."""
+_cached_cameras = []
+_probing_cameras = False
+
+def _probe_cameras_background(max_tested=10):
+    global _cached_cameras, _probing_cameras
     available = []
-    failed_attempts = 0
+    # Probe higher indices (like GoPros or virtual cameras) without stopping early
     for i in range(max_tested):
         if sys.platform.startswith('win'):
             cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
@@ -25,57 +28,75 @@ def get_available_cameras(max_tested=4):
         else:
             cap = cv2.VideoCapture(i)
         
+        
         if cap.isOpened():
             ret, _ = cap.read()
             if ret:
                 available.append({"index": i, "name": f"Camera {i}"})
             cap.release()
-        else:
-            failed_attempts += 1
-            if failed_attempts >= 2:
-                # If we fail 2 in a row, assume no more cameras to save time
-                break
-    return available
+    _cached_cameras = available
+    _probing_cameras = False
+
+def get_available_cameras(max_tested=10):
+    """Return cached cameras instantly, trigger background probe if empty."""
+    global _probing_cameras, _cached_cameras
+    
+    # If we have no cameras and aren't already looking, start looking in background
+    if len(_cached_cameras) == 0 and not _probing_cameras:
+        _probing_cameras = True
+        threading.Thread(target=_probe_cameras_background, args=(max_tested,), daemon=True).start()
+        
+    # Return whatever we know so far so we don't block the API!
+    return _cached_cameras
 
 class VideoCamera:
     def __init__(self, index):
         self.index = index
-        if sys.platform.startswith('win'):
-            self.video = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        elif sys.platform == 'darwin':
-            self.video = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
-        else:
-            self.video = cv2.VideoCapture(index)
-            
-        if not self.video.isOpened():
-             self.video = cv2.VideoCapture(index)
-        
-        # Set FPS to 30
-        self.video.set(cv2.CAP_PROP_FPS, 30)
-        
+        self.video = None
         self.lock = threading.Lock()
         self.last_frame = None
         self.last_frame_raw = None
         self.running = True
         self.clients = 0
-        self.thread = threading.Thread(target=self._update, daemon=True)
-        self.thread.start()
         
         # Create a blank placeholder immediately
         blank = np.zeros((480, 640, 3), np.uint8)
-        cv2.putText(blank, f"Cam {index} Init", (200, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(blank, f"Cam {index} Init...", (180, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         _, jpeg = cv2.imencode('.jpg', blank)
         self.last_frame = jpeg.tobytes()
         self.last_frame_raw = blank
 
+        # Start thread immediately; it will open the camera in the background
+        self.thread = threading.Thread(target=self._update, daemon=True)
+        self.thread.start()
+
     def stop(self):
         self.running = False
-        if self.video.isOpened():
+        if self.video and self.video.isOpened():
             self.video.release()
 
     def _update(self):
-        while self.running:
+        # Open camera in the background thread!
+        try:
+            if sys.platform.startswith('win'):
+                self.video = cv2.VideoCapture(self.index, cv2.CAP_DSHOW)
+            elif sys.platform == 'darwin':
+                self.video = cv2.VideoCapture(self.index, cv2.CAP_AVFOUNDATION)
+            else:
+                self.video = cv2.VideoCapture(self.index)
+                
+            if not self.video.isOpened():
+                 self.video = cv2.VideoCapture(self.index)
+            
             if self.video.isOpened():
+                self.video.set(cv2.CAP_PROP_FPS, 30)
+        except Exception as e:
+            logger.error(f"Failed to open camera {self.index}: {e}")
+            self.running = False
+            return
+
+        while self.running:
+            if self.video and self.video.isOpened():
                 ret, frame = self.video.read()
                 if ret:
                     try:

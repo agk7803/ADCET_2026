@@ -91,12 +91,25 @@ export default function TrackGeometry() {
     fetch(`${API_BASE}/camera/list`)
       .then(res => res.json())
       .then(data => {
-        if (data.cameras) {
-          setCameras(data.cameras);
-          // Default sensibly based on availability instead of hardcoded numbers
-          if (data.cameras.length > 0) {
-            setSelectedCamIndex(data.cameras[0].index);
+        let fetchedCameras = data.cameras || [];
+        
+        // Guarantee that 0, 1, 2 are always available as options, even if the probe misses them
+        const forcedIndices = [0, 1, 2];
+        forcedIndices.forEach(idx => {
+          if (!fetchedCameras.find((c: any) => c.index === idx)) {
+            fetchedCameras.push({ index: idx, name: `Camera ${idx}` });
           }
+        });
+        
+        // Sort them just so they look nice in the dropdown
+        fetchedCameras.sort((a: any, b: any) => a.index - b.index);
+
+        setCameras(fetchedCameras);
+        
+        // Default sensibly based on availability instead of hardcoded numbers
+        if (fetchedCameras.length > 0) {
+          // Keep whatever is currently selected if it's valid, else default to 0
+          setSelectedCamIndex(prev => fetchedCameras.find((c: any) => c.index === prev) ? prev : fetchedCameras[0].index);
         }
       })
       .catch(err => console.error("Failed to list cameras", err));
@@ -233,6 +246,31 @@ export default function TrackGeometry() {
                 {timer}
               </div>
             </div>
+            <div className="flex flex-col border-l pl-4 ml-2">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase mb-1">Camera Source</span>
+              <div className="relative group">
+                <select
+                  value={selectedCamIndex}
+                  onChange={(e) => setSelectedCamIndex(Number(e.target.value))}
+                  disabled={cameraOn}
+                  className="bg-gray-50 text-gray-800 font-bold text-sm border border-gray-200 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed w-28 appearance-none"
+                  style={{ backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3E%3Cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'m6 8 4 4 4-4\'/%3E%3C/svg%3E")', backgroundPosition: 'right .5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em', paddingRight: '2.5rem' }}
+                >
+                  {cameras.length === 0 ? (
+                    <option value="" disabled>No cameras found</option>
+                  ) : (
+                    cameras.map(c => (
+                      <option key={c.index} value={c.index}>CAM {c.index}</option>
+                    ))
+                  )}
+                </select>
+                {cameraOn && (
+                  <div className="absolute top-full left-0 mt-1 w-full text-[9px] text-rose-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    Stop Camera to Change
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -328,18 +366,6 @@ export default function TrackGeometry() {
 
       {/* CONTROLS */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-8 bg-gray-900/50 p-6 rounded-2xl border border-white/5">
-        <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-lg border border-white/10">
-          <span className="text-white/50 text-xs font-bold uppercase tracking-widest">Camera Source:</span>
-          <select
-            value={selectedCamIndex}
-            onChange={(e) => setSelectedCamIndex(Number(e.target.value))}
-            className="bg-transparent text-white font-bold text-sm border-none focus:ring-0 cursor-pointer"
-          >
-            {cameras.map(c => (
-              <option key={c.index} value={c.index} className="bg-gray-800">CAM {c.index}</option>
-            ))}
-          </select>
-        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
