@@ -12,6 +12,7 @@ from datetime import datetime
 
 from backend.core import config
 from backend import sensors
+from backend.services import report_session
 import csv
 
 logger = logging.getLogger("cv_processing")
@@ -83,28 +84,7 @@ class TrackGeometryProcessor:
         self.writer: Optional[cv2.VideoWriter] = None
         
         self.latest_gauge = 0.0 # Store latest for API
-        
-        # CSV Logging for Gauge
-        self.log_file: Optional[IO[str]] = None
-        self.csv_writer: Optional[Any] = None
-        self.filename = ""
-        self.setup_csv()
-
-    def setup_csv(self):
-        try:
-            # Make sure gauge logs live alongside the recorded videos.
-            # (e.g. /Users/atharvakolhe/Desktop/storage/video_recording/TrackGeometry)
-            root = ensure_dirs("TrackGeometry")
-            filename = f"gauge_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
-            path = os.path.join(root, filename)
-            self.log_file = open(path, 'w', newline='')
-            self.csv_writer = csv.writer(self.log_file)
-            self.csv_writer.writerow(["Timestamp", "Chainage", "Gauge_Pixels"])
-            logger.info(f"Gauge log created: {path}")
-        except Exception as e:
-            logger.error(f"Failed to setup Gauge CSV: {e}")
-            self.log_file = None
-            self.csv_writer = None
+        self.recording = False
 
     def process(self, frame, chainage=0.0):
         """
@@ -197,14 +177,6 @@ class TrackGeometryProcessor:
             dists = np.abs(rx - lx)
             gauge_val = np.mean(dists)
             self.latest_gauge = float(gauge_val)
-            
-            if self.csv_writer:
-                try:
-                    ts = time.strftime("%H:%M:%S")
-                    self.csv_writer.writerow([ts, f"{chainage:.3f}", f"{gauge_val:.2f}"])
-                    self.log_file.flush()
-                except Exception:
-                    pass
 
         # Prepare Output Frame (Copy of original full frame)
         output_frame = frame.copy()
@@ -242,35 +214,13 @@ class TrackGeometryProcessor:
         return output_frame
 
     def start_recording(self):
-        root = ensure_dirs("TrackGeometry")
-        ts = time.strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(root, f"track_geo_{ts}.mp4")
-        
-        # Resolution depends on the output of process()
-        # Note: We need to know resolution beforehand or wait for first frame.
-        # We'll lazy init in process() if needed, but for now we set flag
-        self.filename = path
         self.recording = True
-        self.writer = None # Lazy init to get size right
         
     def stop_recording(self):
         self.recording = False
-        if self.writer:
-            try:
-                self.writer.release()
-            except Exception as e:
-                logger.error(f"Error releasing geometry writer: {e}")
-            finally:
-                self.writer = None
 
     def record_frame_check(self, frame):
-        # Helper called internally or externally to push frame to writer
-        if self.recording:
-            if self.writer is None:
-                h, w = frame.shape[:2]
-                self.writer = init_writer(self.filename, resolution=(w, h))
-            if self.writer:
-                self.writer.write(frame)
+        pass
 
 # ------------------------------------------------------------------------------
 # RAIL PROFILE (RIGHT FRAME) PROCESSOR
@@ -311,11 +261,9 @@ class RailProfileProcessor:
         return combined
 
     def start_recording(self):
-        root = ensure_dirs("RailProfile")
-        ts = time.strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(root, f"rail_mask_{ts}.mp4")
-        
-        self.filename = path
+        # Save video into the shared Desktop report folder
+        root = report_session.get_report_dir()
+        self.filename = os.path.join(root, "rail_profile.avi")
         self.recording = True
         self.writer = None 
 
@@ -407,10 +355,10 @@ class RailConditionProcessor:
         pass
 
     def start_recording(self):
-        root = ensure_dirs("ConditionMonitoring")
-        ts = time.strftime("%Y%m%d_%H%M%S")
-        self.filename_overlay = os.path.join(root, f"overlay_{ts}.mp4")
-        self.filename_mask = os.path.join(root, f"mask_{ts}.mp4")
+        # Save videos into the shared Desktop report folder
+        root = report_session.get_report_dir()
+        self.filename_overlay = os.path.join(root, "condition_overlay.avi")
+        self.filename_mask = os.path.join(root, "condition_mask.avi")
         
         self.recording = True
         self.writer_overlay = None
@@ -454,6 +402,10 @@ class YoloProcessor:
         # CSV Logging for Defects - moved to start_recording for per-run
         self.log_file: Optional[IO[str]] = None
         self.csv_writer: Optional[Any] = None
+        
+        # Snapshot cooldown: one image per defect class every N seconds
+        self._last_snap_time: Dict[str, float] = {}
+        self._snap_cooldown = 5.0  # seconds
         
         if model_path:
             self.load_model(model_path)
@@ -546,6 +498,22 @@ class YoloProcessor:
                         except Exception as e:
                             logger.error(f"Error logging defect to CSV: {e}")
 
+                        # Save defect snapshot image to report folder (throttled)
+                        try:
+                            now = time.time()
+                            last_t = self._last_snap_time.get(label, 0)
+                            if now - last_t >= self._snap_cooldown:
+                                self._last_snap_time[label] = now
+                                snap_dir = report_session.get_report_dir()
+                                defects_dir = os.path.join(snap_dir, "defect_snapshots")
+                                os.makedirs(defects_dir, exist_ok=True)
+                                snap_ts = time.strftime("%H%M%S")
+                                snap_name = f"defect_{label}_{snap_ts}.jpg"
+                                snap_path = os.path.join(defects_dir, snap_name)
+                                cv2.imwrite(snap_path, processed)
+                        except Exception as e:
+                            logger.error(f"Error saving defect snapshot: {e}")
+
         # 3. Chainage Overlay
         if self.get_chainage_callback:
             try:
@@ -566,15 +534,11 @@ class YoloProcessor:
 
     def start_recording(self):
         with self.lock:
-            # Create per-run folder on desktop with start time
-            desktop_path = os.path.expanduser("~/Desktop")
-            report_dir = os.path.join(desktop_path, "report")
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            run_dir = os.path.join(report_dir, ts)
-            os.makedirs(run_dir, exist_ok=True)
+            # Use shared report session folder on Desktop
+            run_dir = report_session.get_report_dir()
             
             # Video file
-            self.filename = os.path.join(run_dir, f"condition_monitoring.avi")
+            self.filename = os.path.join(run_dir, "condition_monitoring.avi")
             
             # CSV file
             try:
@@ -619,3 +583,37 @@ class YoloProcessor:
             if self.writer:
                 self.writer.write(frame)
 
+# ------------------------------------------------------------------------------
+# REAR WINDOW RECORDER
+# ------------------------------------------------------------------------------
+class RearWindowRecorder:
+    """Simple recorder that saves raw camera frames to the report folder."""
+    def __init__(self):
+        self.recording = False
+        self.writer: Optional[cv2.VideoWriter] = None
+        self.filename = ""
+
+    def start_recording(self):
+        root = report_session.get_report_dir()
+        self.filename = os.path.join(root, "rear_window.avi")
+        self.recording = True
+        self.writer = None  # Lazy init
+
+    def stop_recording(self):
+        self.recording = False
+        if self.writer is not None:
+            try:
+                self.writer.release()
+            except Exception as e:
+                logger.error(f"Error releasing rear window writer: {e}")
+            finally:
+                self.writer = None
+
+    def record_frame(self, frame):
+        if not self.recording or frame is None:
+            return
+        if self.writer is None:
+            h, w = frame.shape[:2]
+            self.writer = init_writer(self.filename, resolution=(w, h))
+        if self.writer:
+            self.writer.write(frame)

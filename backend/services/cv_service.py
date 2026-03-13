@@ -155,6 +155,9 @@ class VideoCamera:
                     # Yolo on frame
                     yolo_frame_result = yolo_processor.process(frame)
                     self.last_yolo = yolo_frame_result if yolo_frame_result is not None else frame
+
+                    # Rear window recording (raw frames)
+                    rear_recorder.record_frame(frame)
                 else:
                     time.sleep(0.1)
             else:
@@ -213,6 +216,7 @@ geo_processor = cv_processing.TrackGeometryProcessor()
 rail_processor = cv_processing.RailProfileProcessor()
 cond_processor = cv_processing.RailConditionProcessor()
 yolo_processor = cv_processing.YoloProcessor(get_chainage_callback=lambda: sensors.get_latest_state().get('y', 0.0))
+rear_recorder = cv_processing.RearWindowRecorder()
 
 # Generators for processed feeds
 def generate_track_geometry_feed(index_source=1):

@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from backend import simulator
 from backend.core import config
 from backend.services import sensor_service, cv_service, db_service, report_service
+from backend.services import report_session
 
 # Global State from original server.py
 CONDITION_MODE = "laser"
@@ -96,6 +97,7 @@ def connect_system(
                 # Default simulator to 20Hz as before
                 simulator.start_simulator(rate_hz=20)
                 sensors.start_db_session("SIMULATOR")
+            report_session.start_report_session()
             return {"status": "connected", "mode": "SIMULATOR"}
             
         elif config.DATA_SOURCE == "SERIAL":
@@ -103,12 +105,14 @@ def connect_system(
                 return {"status": "connected", "source": "simulator"}
             sensors.start_acquisition(active_port, active_baud, meters_per_step)
             sensors.start_db_session("SERIAL")
+            report_session.start_report_session()
             return {"status": "connected", "mode": "SERIAL", "config": {"port": active_port, "baud": active_baud}}
             
         elif config.DATA_SOURCE == "WIFI":
             # Just open the gate for incoming HTTP POST traffic
             sensors._running = True
             sensors.start_db_session("WIFI")
+            report_session.start_report_session()
             return {"status": "connected", "mode": "WIFI"}
             
         else:
@@ -134,6 +138,7 @@ def disconnect_system():
         sensors.stop_db_session()
         logger.info("WiFi ingestion gate closed.")
 
+    report_session.stop_report_session()
     return {"status": "disconnected"}
 
 @router.post("/reset")
@@ -222,16 +227,26 @@ def get_session_telemetry(session_id: int):
 
 @router.get("/sessions/{session_id}/report")
 def get_session_report(session_id: int):
-    """Generate and download a PDF inspection report for the session."""
+    """Generate and download a PDF inspection report (folder-based)."""
     try:
-        pdf_path = report_service.report_gen.generate_session_report(session_id)
+        pdf_path = report_service.report_gen.generate_folder_report()
         return FileResponse(
             path=pdf_path,
             filename=os.path.basename(pdf_path),
             media_type='application/pdf'
         )
     except Exception as e:
-        logger.error(f"Error generating report for session {session_id}: {e}")
+        logger.error(f"Error generating report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/report/generate")
+def generate_report():
+    """Generate a PDF report from the current session folder."""
+    try:
+        pdf_path = report_service.report_gen.generate_folder_report()
+        return {"status": "generated", "file": pdf_path}
+    except Exception as e:
+        logger.error(f"Error generating report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sessions/{session_id}/export/csv")
@@ -271,10 +286,8 @@ def export_infringements():
 @router.post("/export/acceleration")
 def export_acceleration_data(req: AccelExportRequest):
     try:
-        root = os.path.join(config.STORAGE_DIR, "Acceleration")
-        os.makedirs(root, exist_ok=True)
-        ts = time.strftime("%Y%m%d_%H%M%S")
-        filename = os.path.join(root, f"acceleration_{ts}.xlsx")
+        root = report_session.get_report_dir()
+        filename = os.path.join(root, "acceleration.xlsx")
         
         from openpyxl import Workbook
         from openpyxl.styles import PatternFill
@@ -349,25 +362,31 @@ def get_geometry_data():
 @router.post("/recording/geometry/start")
 def start_geometry_recording():
     cv_service.geo_processor.start_recording()
-    cv_service.rail_processor.start_recording()
     return {"status": "started"}
 
 @router.post("/recording/geometry/stop")
 def stop_geometry_recording():
     cv_service.geo_processor.stop_recording()
-    cv_service.rail_processor.stop_recording()
     return {"status": "stopped"}
 
 @router.post("/recording/condition/start")
 def start_condition_recording():
-    cv_service.cond_processor.start_recording()
     cv_service.yolo_processor.start_recording()
     return {"status": "started"}
 
 @router.post("/recording/condition/stop")
 def stop_condition_recording():
-    cv_service.cond_processor.stop_recording()
     cv_service.yolo_processor.stop_recording()
+    return {"status": "stopped"}
+
+@router.post("/recording/rearwindow/start")
+def start_rearwindow_recording():
+    cv_service.rear_recorder.start_recording()
+    return {"status": "started"}
+
+@router.post("/recording/rearwindow/stop")
+def stop_rearwindow_recording():
+    cv_service.rear_recorder.stop_recording()
     return {"status": "stopped"}
 
 @router.get("/condition/mode")

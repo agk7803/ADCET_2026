@@ -103,6 +103,27 @@ export const Header: React.FC = () => {
             )}
           </div>
 
+          {/* Export Data — Generate Report */}
+          <button
+            onClick={async () => {
+              const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+              try {
+                const res = await fetch(`${API}/report/generate`, { method: "POST" });
+                const data = await res.json();
+                if (res.ok) {
+                  alert(`Report generated!\n${data.file}`);
+                } else {
+                  alert(`Report failed: ${data.detail || "Unknown error"}`);
+                }
+              } catch (e) {
+                alert("Failed to generate report — is the system running?");
+              }
+            }}
+            className="px-6 py-2 rounded-md font-bold text-sm uppercase transition-all shadow-lg active:scale-95 flex items-center gap-2 bg-indigo-600 text-white ring-2 ring-indigo-100 hover:bg-indigo-700"
+          >
+            EXPORT DATA
+          </button>
+
           {/* System Control Button */}
           <button
             onClick={toggleSystem}

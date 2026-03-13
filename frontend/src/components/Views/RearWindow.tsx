@@ -60,8 +60,8 @@ const RearWindow: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const recStart = await fetch(`${API_BASE}/recording/start`, { method: "POST" });
-      if (!recStart.ok) throw new Error("recording/start failed");
+      const recStart = await fetch(`${API_BASE}/recording/rearwindow/start`, { method: "POST" });
+      if (!recStart.ok) throw new Error("recording/rearwindow/start failed");
       setRecording(true);
     } catch (e: any) {
       console.error(e);
@@ -76,7 +76,7 @@ const RearWindow: React.FC = () => {
     setRecording(false);
     setError(null);
     try {
-      await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
+      await fetch(`${API_BASE}/recording/rearwindow/stop`, { method: "POST" });
     } catch (e: any) {
       console.error(e);
       setError(String(e));

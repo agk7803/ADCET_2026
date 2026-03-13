@@ -669,12 +669,16 @@ def start_recording(file_prefix="session"):
     logger.info(f"Recording started. Log: {filename}")
     logger.info(f"Recording started. Log: {filename}")
 
-    # Start Infringement CSV (inside current session folder)
-    _infringement_filename = os.path.join(session_dir, "Infringements", f"{file_prefix}_{ts_str}_infringements.csv")
+    # Start Infringement CSV — save to Desktop report folder
+    try:
+        from backend.services import report_session
+        inf_root = report_session.get_report_dir()
+    except Exception:
+        inf_root = session_dir
+    _infringement_filename = os.path.join(inf_root, "infringement.csv")
     try:
         global _infringement_file
         _infringement_file = open(_infringement_filename, "w")
-        # Header
         _infringement_file.write("timestamp,y,lidar1_m,lidar2_m,lidar3_m,class_1,class_2,class_3\n")
     except Exception as e:
         logger.error(f"Failed to open infringement log: {e}")
