@@ -9,6 +9,9 @@ interface TabNavigationProps {
 }
 
 export const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange }) => {
+  // Temporarily hide certain tabs without removing code
+  const hiddenTabs = new Set<string>(["rail-condition", "track-geometry"]);
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'track-geometry', label: 'Track Geometry' },
@@ -20,7 +23,7 @@ export const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabCh
     { id: 'rear-window', label: 'Rear Window' },
     { id: 'maintenance', label: 'Maintenance' }
 
-  ];
+  ].filter(tab => !hiddenTabs.has(tab.id));
 
   return (
     <>
