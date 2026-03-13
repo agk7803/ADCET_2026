@@ -164,6 +164,16 @@ const ConditionMonitoring: React.FC = () => {
 
   const reloadStream = () => setReloadKey((k) => k + 1);
 
+  useEffect(() => {
+    const handleSystemStop = () => {
+      if (recording) stopRecording();
+      if (cameraOn) stopCamera();
+    };
+
+    window.addEventListener("system-stop", handleSystemStop);
+    return () => window.removeEventListener("system-stop", handleSystemStop);
+  }, [cameraOn, recording]);
+
   return (
     <div style={{ padding: 20 }}>
       {/* Header */}

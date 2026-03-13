@@ -1,10 +1,11 @@
 import React from "react";
 import { Train } from "lucide-react";
 import { useConnection } from "../../contexts/ConnectionContext";
-import { apiStart, apiStop } from "../../utils/api";
 
 export const Header: React.FC = () => {
-  const { backendConnected, sensorsRunning, dataSource, uiDataActive, setUiDataActive, clearHistory, setSessionStartTime } = useConnection();
+  const { backendConnected, dataSource, setUiDataActive, clearHistory, setSessionStartTime } = useConnection();
+  const [systemRunning, setSystemRunning] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
 
   // Status Logic — only reflects backend reachability ("ready to receive data")
   let statusLabel = "SYSTEM OFFLINE";
@@ -16,6 +17,58 @@ export const Header: React.FC = () => {
     statusColor = "text-emerald-600";
     dotColor = "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse";
   }
+
+  const toggleSystem = async () => {
+    setBusy(true);
+    const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+    
+    try {
+      if (!systemRunning) {
+        // Start System
+        clearHistory();
+        setSessionStartTime(Date.now());
+        
+        // Connect sensors
+        await fetch(`${API}/connect`, { method: "POST" }).catch(() => {});
+        
+        // Start camera (using camera index 2 for condition monitoring)
+        await fetch(`${API}/camera/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ index: 2 }),
+        });
+        
+        // Start recordings
+        await fetch(`${API}/recording/start`, { method: "POST" });
+        await fetch(`${API}/recording/condition/start`, { method: "POST" });
+        
+        setUiDataActive(true);
+        setSystemRunning(true);
+      } else {
+        // Stop System
+        setUiDataActive(false);
+        
+        // Stop recordings
+        await fetch(`${API}/recording/stop`, { method: "POST" });
+        await fetch(`${API}/recording/condition/stop`, { method: "POST" });
+        
+        // Stop camera
+        await fetch(`${API}/camera/stop`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ index: 2 }),
+        });
+        
+        setSystemRunning(false);
+        // Notify other UI components to stop their local camera/recording state
+        window.dispatchEvent(new CustomEvent("system-stop"));
+      }
+    } catch (e) {
+      console.error("System toggle failed", e);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
@@ -50,60 +103,16 @@ export const Header: React.FC = () => {
             )}
           </div>
 
-          {/* Master Gate Control — opens/closes data pipeline + starts chainage & timer */}
+          {/* System Control Button */}
           <button
-            onClick={() => {
-              if (uiDataActive) {
-                // Immediately update UI — don't wait for backend
-                setUiDataActive(false);
-
-                // Fire-and-forget: stop all recordings and cameras in background
-                const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-                fetch(`${API}/recording/stop`, { method: "POST" }).catch(() => {});
-                fetch(`${API}/recording/geometry/stop`, { method: "POST" }).catch(() => {});
-                fetch(`${API}/recording/condition/stop`, { method: "POST" }).catch(() => {});
-                for (let i = 0; i < 4; i++) {
-                  fetch(`${API}/camera/stop`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ index: i }),
-                  }).catch(() => {});
-                }
-              } else {
-                clearHistory();
-                setSessionStartTime(Date.now());
-                const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-                fetch(`${API}/reset`, { method: "POST" }).catch(() => {});
-                setUiDataActive(true);
-              }
-            }}
-            className={`px-6 py-2 rounded-md font-bold text-sm uppercase transition-all shadow-lg active:scale-95 flex items-center gap-2 ${uiDataActive
+            onClick={toggleSystem}
+            disabled={busy}
+            className={`px-6 py-2 rounded-md font-bold text-sm uppercase transition-all shadow-lg active:scale-95 flex items-center gap-2 ${busy ? "bg-gray-400 text-gray-200" : systemRunning
               ? "bg-rose-600 text-white ring-2 ring-rose-100 hover:bg-rose-700"
               : "bg-emerald-600 text-white ring-2 ring-emerald-100 hover:bg-emerald-700"
               }`}
           >
-            {uiDataActive ? "STOP SYSTEM" : "START SYSTEM"}
-          </button>
-
-          {/* Hardware Sensor Control (connect/disconnect) */}
-          <button
-            onClick={async () => {
-              try {
-                if (sensorsRunning) {
-                  await apiStop();
-                } else {
-                  await apiStart();
-                }
-              } catch (e) {
-                console.error("Sensor control failed", e);
-              }
-            }}
-            className={`px-6 py-2 rounded-md font-bold text-sm uppercase transition-all shadow-lg active:scale-95 flex items-center gap-2 ${sensorsRunning
-              ? "bg-blue-600 text-white ring-2 ring-blue-100"
-              : "bg-white text-blue-600 border border-blue-100"
-              }`}
-          >
-            {sensorsRunning ? "STOP SENSORS" : "START SENSORS"}
+            {systemRunning ? "STOP SYSTEM" : "START SYSTEM"}
           </button>
 
         </div>

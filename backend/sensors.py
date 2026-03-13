@@ -108,6 +108,7 @@ _writer1_shape = None
 _writer2_shape = None
 _record_start_time = 0
 _current_session_id: Optional[int] = None
+_current_session_dir: Optional[str] = None
 
 # Callbacks for WebSocket broadcasting
 _broadcast_callback = None
@@ -552,8 +553,19 @@ def _add_alert(category: str, msg: str, dist_y: float):
 # CAMERA HELPERS (invoked by server.py generators)
 # ------------------------------------------------------------------------------
 
+def get_session_dir() -> str:
+    """Return the base directory for the current recording session.
+
+    If a session is active, this will be a timestamped folder under STORAGE_DIR.
+    Otherwise it falls back to the global storage root.
+    """
+    if _current_session_dir:
+        return _current_session_dir
+    return config.STORAGE_DIR
+
+
 def _ensure_directories():
-    root = config.STORAGE_DIR
+    root = get_session_dir()
     subdirs = [
         "Acceleration", 
         "video_recording/RearWindow", 
@@ -621,17 +633,24 @@ def record_frame(cam_index, frame):
 
 # Also update start_recording to use the data folder for serial logs
 def start_recording(file_prefix="session"):
-    global _recording, _log_file, _record_start_time, _video_writer1, _video_writer2
+    global _recording, _log_file, _record_start_time, _video_writer1, _video_writer2, _current_session_dir
     if _recording:
         return
 
     ts_str = time.strftime("%Y%m%d_%H%M%S")
     _record_start_time = time.time()
-    
-    root = _ensure_directories()
-    
+
+    # Create a session-root directory for this recording run
+    root = config.STORAGE_DIR
+    session_dir = os.path.join(root, "sessions", ts_str)
+    os.makedirs(session_dir, exist_ok=True)
+    _current_session_dir = session_dir
+
+    # Ensure expected subdirectories exist under the session folder
+    _ensure_directories()
+
     # 1. Open Serial Log (Acceleration Data) -> NOW CSV
-    filename = os.path.join(root, "Acceleration", f"{file_prefix}_{ts_str}_serial.csv")
+    filename = os.path.join(session_dir, "Acceleration", f"{file_prefix}_{ts_str}_serial.csv")
     try:
         _log_file = open(filename, "w")
         # Write CSV Header
@@ -650,8 +669,8 @@ def start_recording(file_prefix="session"):
     logger.info(f"Recording started. Log: {filename}")
     logger.info(f"Recording started. Log: {filename}")
 
-    # Start Infringement CSV
-    _infringement_filename = os.path.join(root, "Infringements", f"{file_prefix}_{ts_str}_infringements.csv")
+    # Start Infringement CSV (inside current session folder)
+    _infringement_filename = os.path.join(session_dir, "Infringements", f"{file_prefix}_{ts_str}_infringements.csv")
     try:
         global _infringement_file
         _infringement_file = open(_infringement_filename, "w")
@@ -664,7 +683,7 @@ def start_recording(file_prefix="session"):
 
 def stop_recording():
     global _recording, _log_file, _video_writer1, _video_writer2
-    global _writer1_shape, _writer2_shape
+    global _writer1_shape, _writer2_shape, _current_session_dir
     _recording = False
     
     if _log_file:
@@ -685,6 +704,9 @@ def stop_recording():
     if _infringement_file:
         _infringement_file.close()
         _infringement_file = None
+
+    # Reset session directory since recording has stopped
+    _current_session_dir = None
 
     logger.info("Recording stopped.")
 

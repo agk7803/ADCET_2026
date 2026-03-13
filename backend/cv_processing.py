@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any, Tuple, IO
 from datetime import datetime
 
 from backend.core import config
+from backend import sensors
 import csv
 
 logger = logging.getLogger("cv_processing")
@@ -28,8 +29,13 @@ def init_writer(path, fps=20.0, resolution=(640, 480)):
         return None
 
 def ensure_dirs(subfolder):
-    """Ensure video_recording/<subfolder> exists."""
-    path = os.path.join(config.STORAGE_DIR, "video_recording", subfolder)
+    """Ensure <session_dir>/video_recording/<subfolder> exists.
+
+    When a recording session is active, sensors.get_session_dir() will return
+    the session folder (timestamped). Otherwise it falls back to config.STORAGE_DIR.
+    """
+    root = sensors.get_session_dir()
+    path = os.path.join(root, "video_recording", subfolder)
     os.makedirs(path, exist_ok=True)
     return path
 
