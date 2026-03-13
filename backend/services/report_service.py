@@ -1,13 +1,13 @@
 import os
-import csv
-import time
-import logging
 import glob
+import logging
+from datetime import datetime
+import pandas as pd
+import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import numpy as np
-from datetime import datetime
+
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -39,388 +39,256 @@ def _find_latest_report_folder() -> str:
 
 
 class ReportGenerator:
-    """Generates a PDF report purely from the files in a report folder."""
+    """Generates a compact PDF report utilizing pandas for data processing."""
 
     def generate_folder_report(self, folder_path: str = None) -> str:
-        """Generate PDF from a report folder.
-
-        If folder_path is None, automatically finds the latest folder
-        under ~/Desktop/report/.
-        """
         if not folder_path:
             folder_path = _find_latest_report_folder()
 
         if not os.path.isdir(folder_path):
             raise ValueError(f"Report folder not found: {folder_path}")
 
-        folder_name = os.path.basename(folder_path)
-        report_path = os.path.join(folder_path, f"Inspection_Report_{folder_name}.pdf")
+        session_id = os.path.basename(folder_path)
+        report_path = os.path.join(folder_path, "session_report.pdf")
+
+        # Define styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], alignment=1)
+        h2_style = styles['Heading2']
+        normal_style = styles['Normal']
 
         doc = SimpleDocTemplate(report_path, pagesize=letter)
-        styles = getSampleStyleSheet()
         elements = []
 
-        # ── Title ──
-        title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], alignment=1)
-        elements.append(Paragraph("Railway Inspection Report", title_style))
-        elements.append(Spacer(1, 6))
-        elements.append(Paragraph(f"Session: {folder_name}", styles['Heading2']))
-        elements.append(Spacer(1, 4))
-        elements.append(Paragraph(
-            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            styles['Normal']
-        ))
+        # ==========================================
+        # 1. PAGE 1: Session Summary
+        # ==========================================
+        elements.append(Paragraph("Railway Inspection Summary", title_style))
+        elements.append(Spacer(1, 10))
+        elements.append(Paragraph(f"<b>Session ID:</b> {session_id}", normal_style))
+        elements.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", normal_style))
         elements.append(Spacer(1, 20))
+        
+        # Load and aggregate data using pandas
+        yolo_path = os.path.join(folder_path, "yolo_defects.csv")
+        inf_path = os.path.join(folder_path, "infringement.csv")
+        acc_path = os.path.join(folder_path, "acceleration.xlsx")
 
-        # ── 1. Session Info ──
-        elements.append(Paragraph("1. Session Information", styles['Heading2']))
-        files_in_folder = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+        total_defects = 0
+        df_defects = None
+        if os.path.exists(yolo_path):
+            try:
+                df_defects = pd.read_csv(yolo_path)
+                total_defects = len(df_defects)
+            except Exception as e:
+                logger.error(f"Error reading yolo_defects.csv: {e}")
 
-        info_data = [
-            ["Parameter", "Value"],
-            ["Session Folder", folder_name],
-            ["Files Count", str(len(files_in_folder))],
-            ["Generated At", datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+        min_clearance = "N/A"
+        class_counts = {"UML": 0, "PML": 0, "CBML": 0}
+        df_inf = None
+        if os.path.exists(inf_path):
+            try:
+                df_inf = pd.read_csv(inf_path)
+                if not df_inf.empty:
+                    # Minimum clearance over all lidars
+                    lidar_cols = [c for c in ['lidar1_m', 'lidar2_m', 'lidar3_m'] if c in df_inf.columns]
+                    if lidar_cols:
+                        # Replace 0 with NaN so it doesn't count as actual clearance
+                        df_lidar = df_inf[lidar_cols].replace(0.0, np.nan)
+                        min_c = df_lidar.min().min()
+                        if pd.notna(min_c):
+                            min_clearance = f"{min_c:.3f} m"
+                    
+                    # Tally classifications
+                    class_cols = [c for c in ['class_1', 'class_2', 'class_3'] if c in df_inf.columns]
+                    for c_col in class_cols:
+                        counts = df_inf[c_col].value_counts()
+                        for cls_name in class_counts.keys():
+                            class_counts[cls_name] += counts.get(cls_name, 0)
+            except Exception as e:
+                logger.error(f"Error reading infringement.csv: {e}")
+
+        max_acc = "N/A"
+        df_acc = None
+        if os.path.exists(acc_path):
+            try:
+                # Assuming standard acceleration.xlsx layout
+                df_acc = pd.read_excel(acc_path)
+                if not df_acc.empty:
+                    acc_cols = [col for col in df_acc.columns if 'acc' in col.lower() or 'ax' in col.lower() or 'ay' in col.lower() or 'az' in col.lower()]
+                    # To find max magnitude we can look at the max absolute value across axes
+                    if acc_cols:
+                        max_val = df_acc[acc_cols].abs().max().max()
+                        if pd.notna(max_val):
+                            max_acc = f"{max_val:.3f} g"
+            except Exception as e:
+                logger.error(f"Error reading acceleration.xlsx: {e}")
+
+        # Summary Table
+        elements.append(Paragraph("Key Session Metrics", h2_style))
+        summary_data = [
+            ["Metric", "Value"],
+            ["Total Defects Detected", str(total_defects)],
+            ["Minimum Clearance Found", str(min_clearance)],
+            ["Maximum Peak Acceleration", str(max_acc)],
+            ["UML (Urgent) Clearances", str(class_counts["UML"])],
+            ["PML (Planned) Clearances", str(class_counts["PML"])],
+            ["CBML (Safe) Clearances", str(class_counts["CBML"])]
         ]
-        t = Table(info_data, colWidths=[140, 320])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a5f')),
+        
+        t_sum = Table(summary_data, colWidths=[200, 150])
+        t_sum.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a5276')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#f0f4f8')),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f9f9f9')),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('PADDING', (0, 0), (-1, -1), 8),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
         ]))
-        elements.append(t)
-        elements.append(Spacer(1, 20))
+        elements.append(t_sum)
+        elements.append(PageBreak())
 
-        # ── 2. Defect Detection Report ──
-        elements.append(Paragraph("2. Condition Monitoring — Defect Detections", styles['Heading2']))
-        defects = self._read_defects_csv(folder_path)
-        if defects:
-            elements.append(Paragraph(
-                f"Total defects detected: <b>{len(defects)}</b>", styles['Normal']
-            ))
-            elements.append(Spacer(1, 8))
+        # ==========================================
+        # 2. PAGE 2: Defect Summary (Top 10)
+        # ==========================================
+        elements.append(Paragraph("Top 10 Defect Detections", h2_style))
+        if df_defects is not None and not df_defects.empty:
+            # Try to sort by Confidence
+            conf_col = next((c for c in df_defects.columns if 'conf' in c.lower()), None)
+            if conf_col:
+                # Coerce to numeric just in case
+                df_defects[conf_col] = pd.to_numeric(df_defects[conf_col], errors='coerce')
+                top_defects = df_defects.sort_values(by=conf_col, ascending=False).head(10)
+            else:
+                top_defects = df_defects.head(10)
 
-            defect_table_data = [["#", "Time", "Chainage (m)", "Defect Class", "Confidence"]]
-            for i, d in enumerate(defects[:100], 1):
-                defect_table_data.append([
-                    str(i), d['time'], d['chainage'], d['defect_class'], d['confidence']
-                ])
+            # Map columns to output fields
+            time_c = next((c for c in top_defects.columns if 'time' in c.lower()), 'N/A')
+            chain_c = next((c for c in top_defects.columns if 'chainage' in c.lower()), 'N/A')
+            label_c = next((c for c in top_defects.columns if 'class' in c.lower() or 'label' in c.lower()), 'N/A')
+            
+            defect_table_data = [["Timestamp", "Chainage", "Label", "Confidence"]]
+            for _, row in top_defects.iterrows():
+                t_val = str(row[time_c]) if time_c in row else "N/A"
+                c_val = str(row[chain_c]) if chain_c in row else "N/A"
+                l_val = str(row[label_c]) if label_c in row else "Undefined"
+                conf_val = f"{row[conf_col]:.2f}" if conf_col and pd.notna(row[conf_col]) else "N/A"
+                
+                defect_table_data.append([t_val, c_val, l_val, conf_val])
 
-            t_def = Table(defect_table_data, colWidths=[30, 70, 80, 160, 70])
+            t_def = Table(defect_table_data, colWidths=[80, 80, 150, 80])
             t_def.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#8b0000')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ('PADDING', (0, 0), (-1, -1), 4),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fff5f5')]),
+                ('PADDING', (0, 0), (-1, -1), 6),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
             ]))
             elements.append(t_def)
         else:
-            elements.append(Paragraph("No defects detected during this session.", styles['Normal']))
-        elements.append(Spacer(1, 16))
+            elements.append(Paragraph("No defects detected or log file missing.", normal_style))
 
-        # ── 3. Defect Snapshots ──
-        snapshots = self._get_defect_snapshots(folder_path)
-        if snapshots:
-            elements.append(PageBreak())
-            elements.append(Paragraph("3. Defect Snapshots", styles['Heading2']))
-            elements.append(Paragraph(
-                f"Unique snapshots: <b>{len(snapshots)}</b>", styles['Normal']
-            ))
-            elements.append(Spacer(1, 10))
-            for snap_path in snapshots:
-                snap_name = os.path.basename(snap_path)
-                elements.append(Paragraph(f"<i>{snap_name}</i>", styles['Normal']))
-                try:
-                    elements.append(Image(snap_path, width=420, height=280))
-                except Exception:
-                    elements.append(Paragraph("[Image could not be loaded]", styles['Normal']))
-                elements.append(Spacer(1, 14))
-
-        # ── 4. Infringement Data (Lidar Clearances) ──
-        infringement_data = self._read_infringement_csv(folder_path)
-        if infringement_data:
-            elements.append(PageBreak())
-            elements.append(Paragraph("4. Structure Clearance — Infringement Data", styles['Heading2']))
-            elements.append(Paragraph(
-                f"Total readings: <b>{len(infringement_data)}</b>", styles['Normal']
-            ))
-            elements.append(Spacer(1, 8))
-
-            # Summary: count UML/PML/CBML
-            from collections import Counter
-            c1_counts = Counter(d['class_1'] for d in infringement_data)
-            c2_counts = Counter(d['class_2'] for d in infringement_data)
-            c3_counts = Counter(d['class_3'] for d in infringement_data)
-
-            cls_summary = [
-                ["Sensor", "UML (Red)", "PML (Yellow)", "CBML (Green)", "Total"],
-                ["Lidar 1 (Left)", str(c1_counts.get('UML', 0)), str(c1_counts.get('PML', 0)),
-                 str(c1_counts.get('CBML', 0)), str(len(infringement_data))],
-                ["Lidar 2 (Right)", str(c2_counts.get('UML', 0)), str(c2_counts.get('PML', 0)),
-                 str(c2_counts.get('CBML', 0)), str(len(infringement_data))],
-                ["Lidar 3 (Top)", str(c3_counts.get('UML', 0)), str(c3_counts.get('PML', 0)),
-                 str(c3_counts.get('CBML', 0)), str(len(infringement_data))],
-            ]
-            t_inf = Table(cls_summary, colWidths=[100, 80, 80, 80, 60])
-            t_inf.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ('PADDING', (0, 0), (-1, -1), 5),
-                # Color UML cells red, PML yellow
-                ('TEXTCOLOR', (1, 1), (1, -1), colors.HexColor('#cc0000')),
-                ('TEXTCOLOR', (2, 1), (2, -1), colors.HexColor('#cc8800')),
-                ('TEXTCOLOR', (3, 1), (3, -1), colors.HexColor('#008800')),
-            ]))
-            elements.append(t_inf)
-            elements.append(Spacer(1, 12))
-
-            # Lidar distance stats
-            l1_vals = [float(d['l1']) for d in infringement_data if d['l1']]
-            l2_vals = [float(d['l2']) for d in infringement_data if d['l2']]
-            l3_vals = [float(d['l3']) for d in infringement_data if d['l3']]
-
-            if l1_vals:
-                lidar_stats = [
-                    ["Sensor", "Min (m)", "Max (m)", "Mean (m)"],
-                    ["Lidar 1", f"{min(l1_vals):.3f}", f"{max(l1_vals):.3f}", f"{np.mean(l1_vals):.3f}"],
-                    ["Lidar 2", f"{min(l2_vals):.3f}", f"{max(l2_vals):.3f}", f"{np.mean(l2_vals):.3f}"],
-                    ["Lidar 3", f"{min(l3_vals):.3f}", f"{max(l3_vals):.3f}", f"{np.mean(l3_vals):.3f}"],
-                ]
-                t_ls = Table(lidar_stats, colWidths=[80, 80, 80, 80])
-                t_ls.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a5276')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                    ('PADDING', (0, 0), (-1, -1), 5),
-                ]))
-                elements.append(t_ls)
-                elements.append(Spacer(1, 12))
-
-            # Lidar chart
-            chart = self._generate_infringement_chart(folder_path, infringement_data)
-            if chart:
-                elements.append(Image(chart, width=480, height=200))
-                elements.append(Spacer(1, 8))
-
-        # ── 5. Acceleration Data ──
-        accel_path = os.path.join(folder_path, "acceleration.xlsx")
-        if os.path.exists(accel_path):
-            elements.append(PageBreak())
-            elements.append(Paragraph("5. Acceleration Data", styles['Heading2']))
-            accel_data = self._read_acceleration_xlsx(accel_path)
-            if accel_data:
-                elements.append(Paragraph(
-                    f"Data points: <b>{len(accel_data)}</b>", styles['Normal']
-                ))
-                elements.append(Spacer(1, 8))
-
-                ax_vals = [d['ax'] for d in accel_data if d['ax'] is not None]
-                ay_vals = [d['ay'] for d in accel_data if d['ay'] is not None]
-                az_vals = [d['az'] for d in accel_data if d['az'] is not None]
-
-                if ax_vals:
-                    accel_stats = [
-                        ["Axis", "Min", "Max", "Mean", "Std Dev"],
-                        ["Acc X", f"{min(ax_vals):.4f}", f"{max(ax_vals):.4f}",
-                         f"{np.mean(ax_vals):.4f}", f"{np.std(ax_vals):.4f}"],
-                        ["Acc Y", f"{min(ay_vals):.4f}", f"{max(ay_vals):.4f}",
-                         f"{np.mean(ay_vals):.4f}", f"{np.std(ay_vals):.4f}"],
-                        ["Acc Z", f"{min(az_vals):.4f}", f"{max(az_vals):.4f}",
-                         f"{np.mean(az_vals):.4f}", f"{np.std(az_vals):.4f}"],
-                    ]
-                    t_acc = Table(accel_stats, colWidths=[60, 80, 80, 80, 80])
-                    t_acc.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a5276')),
-                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                        ('PADDING', (0, 0), (-1, -1), 5),
-                    ]))
-                    elements.append(t_acc)
-                    elements.append(Spacer(1, 12))
-
-                    chart = self._generate_accel_chart(folder_path, ax_vals, ay_vals, az_vals)
-                    if chart:
-                        elements.append(Image(chart, width=480, height=200))
-                        elements.append(Spacer(1, 8))
-
-                    # Defect status breakdown
-                    statuses = [d['status'] for d in accel_data if d['status']]
-                    if statuses:
-                        counts = Counter(statuses)
-                        status_data = [["Status", "Count", "Percentage"]]
-                        total = len(statuses)
-                        for status, count in sorted(counts.items()):
-                            pct = (count / total) * 100
-                            status_data.append([status, str(count), f"{pct:.1f}%"])
-                        t_status = Table(status_data, colWidths=[120, 80, 100])
-                        t_status.setStyle(TableStyle([
-                            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
-                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                            ('PADDING', (0, 0), (-1, -1), 5),
-                        ]))
-                        elements.append(Spacer(1, 12))
-                        elements.append(Paragraph("Acceleration Defect Status:", styles['Heading3']))
-                        elements.append(t_status)
-
-        # ── 6. Session Files ──
         elements.append(PageBreak())
-        elements.append(Paragraph("6. Session Files", styles['Heading2']))
-        elements.append(Spacer(1, 8))
 
-        file_list_data = [["File", "Size"]]
-        for fname in sorted(os.listdir(folder_path)):
-            fpath = os.path.join(folder_path, fname)
-            if os.path.isfile(fpath):
-                size_kb = os.path.getsize(fpath) / 1024
-                if size_kb > 1024:
-                    file_list_data.append([fname, f"{size_kb/1024:.1f} MB"])
-                else:
-                    file_list_data.append([fname, f"{size_kb:.1f} KB"])
-            elif os.path.isdir(fpath):
-                count = len(os.listdir(fpath))
-                file_list_data.append([f"{fname}/", f"{count} files"])
+        # ==========================================
+        # 3. PAGE 3: Clearance and Vibration Charts
+        # ==========================================
+        elements.append(Paragraph("Structure Clearance Profile", h2_style))
+        if df_inf is not None and not df_inf.empty:
+            try:
+                chart_inf_path = os.path.join(folder_path, "report_clearance_chart.png")
+                plt.figure(figsize=(7, 3))
+                
+                # Get Lidar cols
+                lcols = [c for c in ['lidar1_m', 'lidar2_m', 'lidar3_m'] if c in df_inf.columns]
+                colors_lc = ['orange', 'royalblue', 'tomato']
+                
+                for idx, col in enumerate(lcols):
+                    y_vals = df_inf[col].replace(0.0, np.nan)
+                    x_vals = range(len(y_vals))
+                    # Attempt to use chainage for X (column named 'y' or containing 'chain')
+                    chain_cols = [c for c in df_inf.columns if c.lower() == 'y' or 'chain' in c.lower()]
+                    if chain_cols:
+                        x_vals = df_inf[chain_cols[0]]
+                        
+                    plt.plot(x_vals, y_vals, label=col, color=colors_lc[idx % 3], linewidth=0.8, alpha=0.8)
 
-        if len(file_list_data) > 1:
-            t_files = Table(file_list_data, colWidths=[300, 100])
-            t_files.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#333333')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ('PADDING', (0, 0), (-1, -1), 5),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ]))
-            elements.append(t_files)
+                plt.title("Clearance (m) vs Distance", fontsize=10, fontweight='bold')
+                plt.ylabel("Clearance (m)", fontsize=9)
+                plt.grid(True, linestyle='--', alpha=0.5)
+                plt.legend(fontsize=8)
+                plt.tight_layout()
+                plt.savefig(chart_inf_path, dpi=120)
+                plt.close()
+
+                elements.append(Image(chart_inf_path, width=450, height=200))
+                elements.append(Spacer(1, 15))
+            except Exception as e:
+                logger.error(f"Error plotting clearance: {e}")
+                elements.append(Paragraph("Failed to generate clearance chart.", normal_style))
+        else:
+            elements.append(Paragraph("No infringement data available for chart.", normal_style))
+            elements.append(Spacer(1, 15))
+
+
+        elements.append(Paragraph("Vehicle Acceleration Profile", h2_style))
+        if df_acc is not None and not df_acc.empty:
+            try:
+                chart_acc_path = os.path.join(folder_path, "report_accel_chart.png")
+                plt.figure(figsize=(7, 3))
+                
+                ax_cols = [c for c in df_acc.columns if c.lower() in ['acc x', 'accx', 'ax']]
+                ay_cols = [c for c in df_acc.columns if c.lower() in ['acc y', 'accy', 'ay']]
+                az_cols = [c for c in df_acc.columns if c.lower() in ['acc z', 'accz', 'az']]
+                
+                chain_cols = [c for c in df_acc.columns if 'chainage' in c.lower() or c.lower() == 'y']
+                x_vals = df_acc[chain_cols[0]] if chain_cols else range(len(df_acc))
+
+                if ax_cols: plt.plot(x_vals, df_acc[ax_cols[0]], label="Acc X", color='tomato', linewidth=0.6, alpha=0.7)
+                if ay_cols: plt.plot(x_vals, df_acc[ay_cols[0]], label="Acc Y", color='mediumseagreen', linewidth=0.6, alpha=0.7)
+                if az_cols: plt.plot(x_vals, df_acc[az_cols[0]], label="Acc Z", color='royalblue', linewidth=0.6, alpha=0.7)
+
+                plt.title("Acceleration (g) vs Distance", fontsize=10, fontweight='bold')
+                plt.ylabel("Acceleration", fontsize=9)
+                plt.grid(True, linestyle='--', alpha=0.5)
+                plt.legend(fontsize=8)
+                plt.tight_layout()
+                plt.savefig(chart_acc_path, dpi=120)
+                plt.close()
+
+                elements.append(Image(chart_acc_path, width=450, height=200))
+            except Exception as e:
+                logger.error(f"Error plotting acceleration: {e}")
+                elements.append(Paragraph("Failed to generate acceleration chart.", normal_style))
+        else:
+            elements.append(Paragraph("No acceleration data available for chart.", normal_style))
+
+        # ==========================================
+        # 4. PAGE 4: Key Evidence Images (Top 5)
+        # ==========================================
+        snap_dir = os.path.join(folder_path, "defect_snapshots")
+        if os.path.isdir(snap_dir):
+            snaps = sorted(glob.glob(os.path.join(snap_dir, "*.jpg")))
+            if snaps:
+                elements.append(PageBreak())
+                elements.append(Paragraph("Key Evidence Snapshots", h2_style))
+                elements.append(Paragraph("Displaying up to 5 representative snapshots.", normal_style))
+                elements.append(Spacer(1, 10))
+                
+                # Take up to 5
+                for snap_path in snaps[:5]:
+                    snap_name = os.path.basename(snap_path)
+                    try:
+                        elements.append(Image(snap_path, width=320, height=200))
+                        elements.append(Paragraph(f"<i>{snap_name}</i>", normal_style))
+                        elements.append(Spacer(1, 15))
+                    except Exception:
+                        pass
 
         # Build PDF
         doc.build(elements)
         logger.info(f"Report generated: {report_path}")
         return report_path
-
-    # ── Helpers ──
-
-    def _read_defects_csv(self, folder):
-        csv_path = os.path.join(folder, "yolo_defects.csv")
-        if not os.path.exists(csv_path):
-            return []
-        defects = []
-        try:
-            with open(csv_path, 'r') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    defects.append({
-                        'time': row.get('Timestamp', ''),
-                        'chainage': row.get('Chainage', ''),
-                        'defect_class': row.get('Defect_Class', ''),
-                        'confidence': row.get('Confidence', ''),
-                    })
-        except Exception as e:
-            logger.error(f"Error reading defects CSV: {e}")
-        return defects
-
-    def _get_defect_snapshots(self, folder):
-        snap_dir = os.path.join(folder, "defect_snapshots")
-        if not os.path.isdir(snap_dir):
-            return []
-        return sorted(glob.glob(os.path.join(snap_dir, "*.jpg")))
-
-    def _read_infringement_csv(self, folder):
-        csv_path = os.path.join(folder, "infringement.csv")
-        if not os.path.exists(csv_path):
-            return []
-        data = []
-        try:
-            with open(csv_path, 'r') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    data.append({
-                        'timestamp': row.get('timestamp', ''),
-                        'chainage': row.get('y', ''),
-                        'l1': row.get('lidar1_m', ''),
-                        'l2': row.get('lidar2_m', ''),
-                        'l3': row.get('lidar3_m', ''),
-                        'class_1': row.get('class_1', ''),
-                        'class_2': row.get('class_2', ''),
-                        'class_3': row.get('class_3', ''),
-                    })
-        except Exception as e:
-            logger.error(f"Error reading infringement CSV: {e}")
-        return data
-
-    def _read_acceleration_xlsx(self, path):
-        data = []
-        try:
-            from openpyxl import load_workbook
-            wb = load_workbook(path, read_only=True)
-            ws = wb.active
-            rows = list(ws.iter_rows(min_row=2, values_only=True))
-            for row in rows:
-                if len(row) >= 6:
-                    data.append({
-                        'time': row[0],
-                        'chainage': row[1],
-                        'ax': float(row[2]) if row[2] is not None else None,
-                        'ay': float(row[3]) if row[3] is not None else None,
-                        'az': float(row[4]) if row[4] is not None else None,
-                        'status': row[5],
-                    })
-            wb.close()
-        except Exception as e:
-            logger.error(f"Error reading acceleration xlsx: {e}")
-        return data
-
-    def _generate_infringement_chart(self, folder, data):
-        try:
-            indices = range(len(data))
-            l1 = [float(d['l1']) if d['l1'] else 0 for d in data]
-            l2 = [float(d['l2']) if d['l2'] else 0 for d in data]
-            l3 = [float(d['l3']) if d['l3'] else 0 for d in data]
-
-            plt.figure(figsize=(10, 3.5))
-            plt.plot(indices, l1, label='Lidar 1 (Left)', color='orange', linewidth=0.6, alpha=0.8)
-            plt.plot(indices, l2, label='Lidar 2 (Right)', color='royalblue', linewidth=0.6, alpha=0.8)
-            plt.plot(indices, l3, label='Lidar 3 (Top)', color='tomato', linewidth=0.6, alpha=0.8)
-            plt.title("Structure Clearance Profile", fontsize=11, fontweight='bold')
-            plt.xlabel("Sample #", fontsize=9)
-            plt.ylabel("Distance (m)", fontsize=9)
-            plt.grid(True, linestyle='--', alpha=0.5)
-            plt.legend(fontsize=8)
-            plt.tight_layout()
-            path = os.path.join(folder, "chart_infringement.png")
-            plt.savefig(path, dpi=120)
-            plt.close()
-            return path
-        except Exception as e:
-            logger.error(f"Chart error: {e}")
-            plt.close()
-            return None
-
-    def _generate_accel_chart(self, folder, ax, ay, az):
-        try:
-            x = range(len(ax))
-            plt.figure(figsize=(10, 3.5))
-            plt.plot(x, ax, label='Acc X', color='tomato', linewidth=0.5, alpha=0.7)
-            plt.plot(x, ay, label='Acc Y', color='mediumseagreen', linewidth=0.5, alpha=0.7)
-            plt.plot(x, az, label='Acc Z', color='royalblue', linewidth=0.5, alpha=0.7)
-            plt.title("Acceleration Profile", fontsize=11, fontweight='bold')
-            plt.xlabel("Sample #", fontsize=9)
-            plt.ylabel("Acceleration (m/s²)", fontsize=9)
-            plt.grid(True, linestyle='--', alpha=0.5)
-            plt.legend(fontsize=8)
-            plt.tight_layout()
-            path = os.path.join(folder, "chart_accel.png")
-            plt.savefig(path, dpi=120)
-            plt.close()
-            return path
-        except Exception as e:
-            logger.error(f"Chart error: {e}")
-            plt.close()
-            return None
 
 
 # Global singleton
