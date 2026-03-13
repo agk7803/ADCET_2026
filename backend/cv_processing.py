@@ -86,16 +86,9 @@ class TrackGeometryProcessor:
 
     def setup_csv(self):
         try:
-            # User requested: /Users/atharvakolhe/Desktop/projcopy/project/backend/data/TrackGeometry
-            # root = os.path.join(os.getcwd(), "data", "TrackGeometry")
-            root = os.path.join(config.STORAGE_DIR, "TrackGeometry")
-            os.makedirs(root, exist_ok=True)
-            # actually ensure_dirs("gauge_logs") might be better or just root of TrackGeometry
-            # The user said "gives a csv file for the distances timestamped and chainage stamped"
-            # I'll put it in data/TrackGeometry/gauge_log.csv using append mode or new file per session?
-            # User example didn't specify, I'll use a daily file or session file.
-            # Let's use a single log file for simplicity as per previous patterns or new one.
-            # Previous pattern was session based. I'll make one now.
+            # Make sure gauge logs live alongside the recorded videos.
+            # (e.g. /Users/atharvakolhe/Desktop/storage/video_recording/TrackGeometry)
+            root = ensure_dirs("TrackGeometry")
             filename = f"gauge_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
             path = os.path.join(root, filename)
             self.log_file = open(path, 'w', newline='')

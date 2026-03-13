@@ -59,12 +59,28 @@ class VideoCamera:
         self.running = True
         self.clients = 0
         
+        # Processed frames
+        self.last_condition_overlay = None
+        self.last_condition_mask = None
+        self.last_rail_ai = None
+        self.last_geometry = None
+        self.last_rail_profile = None
+        self.last_yolo = None
+        
         # Create a blank placeholder immediately
         blank = np.zeros((480, 640, 3), np.uint8)
         cv2.putText(blank, f"Cam {index} Init...", (180, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         _, jpeg = cv2.imencode('.jpg', blank)
         self.last_frame = jpeg.tobytes()
         self.last_frame_raw = blank
+
+        # Set processed to blank initially
+        self.last_condition_overlay = blank.copy()
+        self.last_condition_mask = blank.copy()
+        self.last_rail_ai = blank.copy()
+        self.last_geometry = blank.copy()
+        self.last_rail_profile = blank.copy()
+        self.last_yolo = blank.copy()
 
         # Start thread immediately; it will open the camera in the background
         self.thread = threading.Thread(target=self._update, daemon=True)
@@ -101,19 +117,50 @@ class VideoCamera:
                 if ret:
                     try:
                         sensors.record_frame(self.index, frame)
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"record_frame error: {e}")
                     
                     with self.lock:
                         self.last_frame_raw = frame.copy()
                         ret_e, jpeg = cv2.imencode('.jpg', frame)
                         if ret_e:
                             self.last_frame = jpeg.tobytes()
+                    
+                    # Process frame for all outputs
+                    cond_results = cond_processor.process(frame)
+                    if cond_results:
+                        if 'overlay' in cond_results:
+                            self.last_condition_overlay = cond_results['overlay']
+                        if 'mask' in cond_results:
+                            mask = cond_results['mask']
+                            self.last_condition_mask = mask
+
+                    # Run YOLO on the raw camera frame (not the laser mask)
+                    yolo_frame_result = yolo_processor.process(frame)
+                    self.last_rail_ai = yolo_frame_result if yolo_frame_result is not None else frame
+                    
+                    # Geometry
+                    y_val = sensors.get_latest_state().get('y', 0.0)
+                    geo_result = geo_processor.process(frame, chainage=y_val)
+                    self.last_geometry = geo_result if geo_result is not None else frame
+                    if geo_result is not None:
+                        geo_processor.record_frame_check(geo_result)
+                    
+                    # Rail profile
+                    rail_result = rail_processor.process(frame)
+                    self.last_rail_profile = rail_result if rail_result is not None else frame
+                    if rail_result is not None:
+                        rail_processor.record_frame_check(rail_result)
+                    
+                    # Yolo on frame
+                    yolo_frame_result = yolo_processor.process(frame)
+                    self.last_yolo = yolo_frame_result if yolo_frame_result is not None else frame
                 else:
                     time.sleep(0.1)
             else:
                  time.sleep(1)
             time.sleep(0.01)
+            print("CAMERA LOOP ACTIVE", self.index)
 
         # Cleanup: Release the camera cleanly OUTSIDE the loop, in the correct thread
         if self.video and self.video.isOpened():  # pyre-ignore[16]
@@ -141,9 +188,7 @@ class CameraManager:
             camera = self.cameras[index]
 
         try:
-            while True:
-                if not camera.running:
-                    break
+            while camera.running:
                 frame = camera.get_frame()
                 if frame:
                     yield (b'--frame\r\n'
@@ -154,9 +199,6 @@ class CameraManager:
                 if index in self.cameras:
                     cam = self.cameras[index]
                     cam.clients -= 1
-                    if cam.clients <= 0:
-                        cam.stop()
-                        del self.cameras[index]
 
     def force_stop(self, index):
         with self.lock:
@@ -182,12 +224,9 @@ def generate_track_geometry_feed(index_source=1):
     try:
         while True:
             if not cam.running: break
-            frame = cam.get_raw_frame()
+            frame = cam.last_geometry
             if frame is not None:
-                y_val = sensors.get_latest_state().get('y', 0.0)
-                processed = geo_processor.process(frame, chainage=y_val)
-                if processed is None: processed = frame
-                ret, jpeg = cv2.imencode('.jpg', processed)
+                ret, jpeg = cv2.imencode('.jpg', frame)
                 if ret:
                     yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
             time.sleep(0.033)
@@ -195,9 +234,6 @@ def generate_track_geometry_feed(index_source=1):
         with camera_manager.lock:
             if index_source in camera_manager.cameras:
                 camera_manager.cameras[index_source].clients -= 1
-                if camera_manager.cameras[index_source].clients <= 0:
-                    camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_mask_feed(index_source=1):
     with camera_manager.lock:
@@ -208,12 +244,9 @@ def generate_mask_feed(index_source=1):
     try:
         while True:
             if not cam.running: break
-            frame = cam.get_raw_frame()
+            frame = cam.last_rail_profile
             if frame is not None:
-                processed = rail_processor.process(frame)
-                if processed is None: processed = frame
-                rail_processor.record_frame_check(processed)
-                ret, jpeg = cv2.imencode('.jpg', processed)
+                ret, jpeg = cv2.imencode('.jpg', frame)
                 if ret:
                     yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
             time.sleep(0.033)
@@ -221,9 +254,6 @@ def generate_mask_feed(index_source=1):
         with camera_manager.lock:
             if index_source in camera_manager.cameras:
                 camera_manager.cameras[index_source].clients -= 1
-                if camera_manager.cameras[index_source].clients <= 0:
-                    camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_yolo_feed(index_source=2):
     with camera_manager.lock:
@@ -234,11 +264,9 @@ def generate_yolo_feed(index_source=2):
     try:
         while True:
             if not cam.running: break
-            frame = cam.get_raw_frame()
+            frame = cam.last_yolo
             if frame is not None:
-                processed = yolo_processor.process(frame)
-                if processed is None: processed = frame
-                ret, jpeg = cv2.imencode('.jpg', processed)
+                ret, jpeg = cv2.imencode('.jpg', frame)
                 if ret:
                     yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
             time.sleep(0.033)
@@ -246,9 +274,6 @@ def generate_yolo_feed(index_source=2):
         with camera_manager.lock:
             if index_source in camera_manager.cameras:
                 camera_manager.cameras[index_source].clients -= 1
-                if camera_manager.cameras[index_source].clients <= 0:
-                    camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_rail_ai_feed(index_source=2):
     with camera_manager.lock:
@@ -259,24 +284,16 @@ def generate_rail_ai_feed(index_source=2):
     try:
         while True:
             if not cam.running: break
-            frame = cam.get_raw_frame()
+            frame = cam.last_rail_ai
             if frame is not None:
-                cond_results = cond_processor.process(frame)
-                if cond_results and 'mask' in cond_results:
-                    mask_frame = cond_results['mask']
-                    final_processed = yolo_processor.process(mask_frame)
-                    if final_processed is None: final_processed = mask_frame
-                    ret, jpeg = cv2.imencode('.jpg', final_processed)
-                    if ret:
-                        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+                ret, jpeg = cv2.imencode('.jpg', frame)
+                if ret:
+                    yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
             time.sleep(0.033)
     finally:
         with camera_manager.lock:
             if index_source in camera_manager.cameras:
                 camera_manager.cameras[index_source].clients -= 1
-                if camera_manager.cameras[index_source].clients <= 0:
-                    camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_condition_feed_overlay(index_source=1):
     with camera_manager.lock:
@@ -287,23 +304,16 @@ def generate_condition_feed_overlay(index_source=1):
     try:
         while True:
             if not cam.running: break
-            frame = cam.get_raw_frame()
+            frame = cam.last_condition_overlay
             if frame is not None:
-                results = cond_processor.process(frame)
-                if results and 'overlay' in results:
-                    processed = results['overlay']
-                    cond_processor.record_frame_check(processed)
-                    ret, jpeg = cv2.imencode('.jpg', processed)
-                    if ret:
-                        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+                ret, jpeg = cv2.imencode('.jpg', frame)
+                if ret:
+                    yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
             time.sleep(0.033)
     finally:
         with camera_manager.lock:
             if index_source in camera_manager.cameras:
                 camera_manager.cameras[index_source].clients -= 1
-                if camera_manager.cameras[index_source].clients <= 0:
-                    camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]  # pyre-ignore[55]
 
 def generate_condition_feed_mask(index_source=1):
     with camera_manager.lock:
@@ -314,19 +324,13 @@ def generate_condition_feed_mask(index_source=1):
     try:
         while True:
             if not cam.running: break
-            frame = cam.get_raw_frame()
+            frame = cam.last_condition_mask
             if frame is not None:
-                results = cond_processor.process(frame)
-                if results and 'mask' in results:
-                    processed = results['mask']
-                    ret, jpeg = cv2.imencode('.jpg', processed)
-                    if ret:
-                        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+                ret, jpeg = cv2.imencode('.jpg', frame)
+                if ret:
+                    yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
             time.sleep(0.033)
     finally:
         with camera_manager.lock:
             if index_source in camera_manager.cameras:
                 camera_manager.cameras[index_source].clients -= 1
-                if camera_manager.cameras[index_source].clients <= 0:
-                    camera_manager.cameras[index_source].stop()
-                    del camera_manager.cameras[index_source]  # pyre-ignore[55]

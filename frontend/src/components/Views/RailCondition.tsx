@@ -329,17 +329,15 @@ export default function RailCondition() {
           <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded flex items-center gap-2">
             <span>Raw Footage (Cam {selectedCamIndex})</span>
           </div>
-          {cameraOn ? (
-            <img
-              src={`${API_BASE}/video_feed?index=${selectedCamIndex}&t=${reloadKey}`}
-              className="w-full h-full object-cover"
-              alt="Raw Feed"
-            />
-          ) : (
-            <div className="aspect-video flex items-center justify-center text-gray-500">
-              Feed Inactive
-            </div>
-          )}
+          <img
+            src={`${API_BASE}/video_feed?index=${selectedCamIndex}&t=${reloadKey}`}
+            className="w-full h-full object-cover"
+            alt="Raw Feed"
+            style={{ display: cameraOn ? 'block' : 'none' }}
+          />
+          <div className="aspect-video flex items-center justify-center text-gray-500" style={{ display: cameraOn ? 'none' : 'flex' }}>
+            Feed Inactive
+          </div>
         </div>
 
         {/* Right: Processed Feed (Dynamic) */}
@@ -347,20 +345,18 @@ export default function RailCondition() {
           <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded flex items-center gap-2">
             <span>{analysisMode === "yolo" ? "AI Detection" : "Laser Mask"}</span>
           </div>
-          {cameraOn ? (
-            <img
-              src={analysisMode === "yolo"
-                ? `${API_BASE}/video_feed_rail_ai?index=${selectedCamIndex}&t=${reloadKey}`
-                : `${API_BASE}/video_feed_condition_overlay?index=${selectedCamIndex}&t=${reloadKey}`
-              }
-              className="w-full h-full object-cover"
-              alt="Processed Feed"
-            />
-          ) : (
-            <div className="aspect-video flex items-center justify-center text-gray-500">
-              Feed Inactive
-            </div>
-          )}
+          <img
+            src={analysisMode === "yolo"
+              ? `${API_BASE}/video_feed_rail_ai?index=${selectedCamIndex}&t=${reloadKey}`
+              : `${API_BASE}/video_feed_condition_overlay?index=${selectedCamIndex}&t=${reloadKey}`
+            }
+            className="w-full h-full object-cover"
+            alt="Processed Feed"
+            style={{ display: cameraOn ? 'block' : 'none' }}
+          />
+          <div className="aspect-video flex items-center justify-center text-gray-500" style={{ display: cameraOn ? 'none' : 'flex' }}>
+            Feed Inactive
+          </div>
         </div>
       </div>
 

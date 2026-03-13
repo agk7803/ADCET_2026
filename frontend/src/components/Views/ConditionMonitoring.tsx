@@ -16,8 +16,8 @@ const ConditionMonitoring: React.FC = () => {
 
   const [selectedBackendIndex, setSelectedBackendIndex] = useState<number>(2);
 
-  // AI / Laser Mode State
-  const [analysisMode, setAnalysisMode] = useState<"laser" | "ai">("laser");
+  // AI Mode State (always AI now)
+  const [analysisMode, setAnalysisMode] = useState<"ai">("ai");
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
 
@@ -101,19 +101,6 @@ const ConditionMonitoring: React.FC = () => {
       })
       .catch((err) => console.error("Failed to list models", err));
   }, []);
-
-  // Handle Mode Switch (Backend Logic)
-  const handleModeChange = async (mode: "laser" | "ai") => {
-    setAnalysisMode(mode);
-    const backendMode = mode === "ai" ? "yolo" : "laser";
-    try {
-      await fetch(`${API_BASE}/condition/mode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: backendMode })
-      });
-    } catch (e) { console.error("Failed to set mode", e); }
-  };
 
   // Handle Model Selection
   const handleModelSelect = async (path: string) => {
@@ -233,32 +220,21 @@ const ConditionMonitoring: React.FC = () => {
 
       {/* Control Bar */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        {/* Mode Toggles */}
-        <div style={{ display: "flex", background: "#f3f4f6", padding: 4, borderRadius: 6 }}>
-          <button
-            onClick={() => handleModeChange("laser")}
-            style={{
-              padding: "6px 12px", borderRadius: 4, border: "none", cursor: "pointer",
-              background: analysisMode === "laser" ? "#fff" : "transparent",
-              color: analysisMode === "laser" ? "#2563eb" : "#666",
-              boxShadow: analysisMode === "laser" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              fontWeight: "bold"
-            }}
+        {/* AI Controls (always shown) */}
+        <div style={{ marginBottom: 12, padding: 12, background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: 6, display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ color: "#7e22ce", fontWeight: "bold" }}>AI Model:</span>
+          <select
+            value={selectedModel}
+            onChange={(e) => handleModelSelect(e.target.value)}
+            style={{ padding: 6, borderRadius: 4, border: "1px solid #d8b4fe" }}
           >
-            Laser Profile
-          </button>
-          <button
-            onClick={() => handleModeChange("ai")}
-            style={{
-              padding: "6px 12px", borderRadius: 4, border: "none", cursor: "pointer",
-              background: analysisMode === "ai" ? "#fff" : "transparent",
-              color: analysisMode === "ai" ? "#9333ea" : "#666",
-              boxShadow: analysisMode === "ai" ? "0 1px 2px rgba(0,0,0,0.1)" : "none",
-              fontWeight: "bold"
-            }}
-          >
-            AI Model
-          </button>
+            {models.length === 0 && <option value="">No models found in backend/models</option>}
+            {models.map((m) => (
+              <option key={m} value={m.split('/').pop()}>
+                {m.split('/').pop()}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded p-3 flex items-center gap-4">
           <span className="text-sm font-bold text-gray-700">Camera Source:</span>
@@ -293,21 +269,6 @@ const ConditionMonitoring: React.FC = () => {
         </button>
       </div>
 
-      {/* AI Controls */}
-      {analysisMode === "ai" && (
-        <div style={{ marginBottom: 12, padding: 12, background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: 6, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ color: "#7e22ce", fontWeight: "bold" }}>AI Model:</span>
-          <select
-            value={selectedModel}
-            onChange={(e) => handleModelSelect(e.target.value)}
-            style={{ padding: 6, borderRadius: 4, border: "1px solid #d8b4fe" }}
-          >
-            {models.length === 0 && <option value="">No models found in backend/models</option>}
-            {models.map(m => <option key={m} value={m}>{m.split('/').pop()}</option>)}
-          </select>
-        </div>
-      )}
-
       {error && <div style={{ color: "red", marginBottom: 12 }}>{error}</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -329,15 +290,12 @@ const ConditionMonitoring: React.FC = () => {
         {/* Right: Processed */}
         <div style={{ background: "#000", borderRadius: 8, overflow: "hidden", border: "2px solid #333", position: "relative", aspectRatio: "16/9" }}>
           <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12, zIndex: 2 }}>
-            {analysisMode === "ai" ? "AI Detection" : "Laser Mask"}
+            Processed (YOLO Overlay)
           </div>
           {cameraOn ? (
             <img
               key={`proc-${reloadKey}`}
-              src={analysisMode === "ai"
-                ? `${API_BASE}/video_feed_yolo?index=${selectedBackendIndex}&cache=${reloadKey}`
-                : `${API_BASE}/video_feed_condition_overlay?index=${selectedBackendIndex}&cache=${reloadKey}`
-              }
+              src={`${API_BASE}/video_feed_yolo?index=${selectedBackendIndex}&cache=${reloadKey}`}
               alt="Processed Feed"
               style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />

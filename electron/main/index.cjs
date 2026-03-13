@@ -72,6 +72,9 @@ async function startBackend() {
     return ok;
 }
 
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+
 async function createWindow() {
     const ok = await startBackend();
     if (!ok) console.error("[main] Backend failed to start.");
@@ -84,6 +87,7 @@ async function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            backgroundThrottling: false,
             preload: path.join(__dirname, "..", "preload", "index.cjs"),
         },
     });
