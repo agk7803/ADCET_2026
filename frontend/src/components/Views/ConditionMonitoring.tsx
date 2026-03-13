@@ -14,7 +14,7 @@ const ConditionMonitoring: React.FC = () => {
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
-  const CAMERA_INDEX = 2;
+  const CAMERA_INDEX = 1;
 
   // AI Models
   const [models, setModels] = useState<string[]>([]);
@@ -199,7 +199,7 @@ const ConditionMonitoring: React.FC = () => {
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded p-3 flex items-center gap-4">
           <span className="text-sm font-bold text-gray-700">Camera Source:</span>
-          <span className="text-sm">Camera Index 2 (fixed)</span>
+          <span className="text-sm">Camera Index 0 (fixed)</span>
         </div>
 
         <div className="flex gap-2">

@@ -484,15 +484,19 @@ class YoloProcessor:
                     # Color Logic
                     is_defect = False
                     start_label = label.lower()
-                    if any(x in start_label for x in ['defect', 'damage', 'broken', 'fault', 'crack']):
+
+                    # Explicit known defect class names (user provided)
+                    defect_names = {"broken_sleeper", "missing_clips", "cracked_rail"}
+                    if start_label in defect_names:
                         is_defect = True
-                    # Fallback for user's specific remapping mention? 
-                    # They said: "one/two-class aware, red boxes for defects"
-                    # If model has class 1 as defect, we hope it's named such.
-                    # Or if single class, user logic said default to defect.
+                    # Also consider any obvious defect keywords as fallback
+                    elif any(x in start_label for x in ['defect', 'damage', 'broken', 'fault', 'crack']):
+                        is_defect = True
+
+                    # If model has only a single class, treat it as defect by default
                     if len(self.names) == 1:
                         is_defect = True
-                    
+
                     color = (0, 0, 255) if is_defect else (0, 255, 0) # Red (BGR) or Green
                     
                     # Draw Box
