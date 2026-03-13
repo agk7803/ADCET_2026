@@ -184,6 +184,23 @@ class SessionDatabase:
         conn.commit()
         logger.info(f"Ended session {session_id}. Total distance: {total_distance:.3f}m")
 
+    def delete_session(self, session_id: int) -> bool:
+        """Synchronously delete a session and its telemetry data."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                # Delete telemetry first (foreign key constraint)
+                cursor.execute("DELETE FROM telemetry WHERE session_id = ?", (session_id,))
+                # Delete session
+                cursor.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+                conn.commit()
+                logger.info(f"Deleted session {session_id} and associated telemetry")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to delete session {session_id}: {e}")
+                conn.rollback()
+                return False
+
     def get_sessions(self) -> List[Dict[str, Any]]:
         """Return a list of all historical sessions."""
         with self._get_connection() as conn:

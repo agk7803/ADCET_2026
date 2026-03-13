@@ -203,6 +203,14 @@ def get_session(session_id: int):
         raise HTTPException(status_code=404, detail="Session not found")
     return summary
 
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: int):
+    """Delete a session entirely from the database."""
+    success = db_service.db.delete_session(session_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete session")
+    return {"status": "deleted", "session_id": session_id}
+
 @router.get("/sessions/{session_id}/telemetry")
 def get_session_telemetry(session_id: int):
     """Retrieve full telemetry data for a session (replay)."""

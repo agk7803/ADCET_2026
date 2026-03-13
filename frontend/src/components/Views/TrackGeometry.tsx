@@ -84,7 +84,7 @@ export default function TrackGeometry() {
   }, [recording]);
 
   const [cameras, setCameras] = useState<any[]>([]);
-  const [selectedCamIndex, setSelectedCamIndex] = useState(0); 
+  const [selectedCamIndex, setSelectedCamIndex] = useState(0);
 
   useEffect(() => {
     // Fetch available cameras
@@ -92,11 +92,11 @@ export default function TrackGeometry() {
       .then(res => res.json())
       .then(data => {
         if (data.cameras) {
-            setCameras(data.cameras);
-            // Default sensibly based on availability instead of hardcoded numbers
-            if (data.cameras.length > 0) {
-                setSelectedCamIndex(data.cameras[0].index);
-            }
+          setCameras(data.cameras);
+          // Default sensibly based on availability instead of hardcoded numbers
+          if (data.cameras.length > 0) {
+            setSelectedCamIndex(data.cameras[0].index);
+          }
         }
       })
       .catch(err => console.error("Failed to list cameras", err));
@@ -151,8 +151,8 @@ export default function TrackGeometry() {
     setBusy(true);
     try {
       if (recording) {
-         await fetch(`${API_BASE}/recording/geometry/stop`, { method: "POST" });
-         setRecording(false);
+        await fetch(`${API_BASE}/recording/geometry/stop`, { method: "POST" });
+        setRecording(false);
       }
       await fetch(`${API_BASE}/camera/stop`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ index: selectedCamIndex }) });
       setCameraOn(false);
@@ -378,57 +378,6 @@ export default function TrackGeometry() {
 
       {/* PREMIUM CHARTS - STACKED COLUMN */}
       <div className="grid grid-cols-1 gap-6 mt-6">
-
-        {/* CHART 1: INFRASTRUCTURE PROFILE (GAUGE) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Infrastructure Profile</h3>
-              <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">Gauge Deviation (mm) vs Chainage</p>
-            </div>
-            <div className="flex gap-2">
-              <div className="flex items-center gap-1.5 bg-rose-50 px-2 py-1 rounded-md border border-rose-100">
-                <div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
-                <span className="text-[9px] font-semibold text-rose-700 uppercase">Deviation</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-[300px] -ml-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={plotData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis
-                  dataKey="chainage"
-                  type="number"
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={[-10, 10]}
-                  tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#FFF', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', padding: '12px' }}
-                  itemStyle={{ fontSize: '12px', fontWeight: 700 }}
-                  labelStyle={{ fontSize: '10px', color: '#94A3B8', marginBottom: '4px', textTransform: 'uppercase' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="deviation"
-                  stroke="#F43F5E"
-                  strokeWidth={3}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
 
         {/* CHART 2: GYROSCOPE ANALYSIS */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

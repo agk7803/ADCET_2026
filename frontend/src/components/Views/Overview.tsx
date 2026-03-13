@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, AlertTriangle, CheckCircle, TrendingUp, Wifi, WifiOff, MapPin, Play, FileText, Pause, Square, Download } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, TrendingUp, Wifi, WifiOff, MapPin, Play, FileText, Pause, Square, Download, Trash2 } from 'lucide-react';
 import { useConnection } from '../../contexts/ConnectionContext';
 import { TrainMap } from './TrainMap';
 
@@ -78,6 +78,24 @@ export const Overview: React.FC = () => {
       setSessions(data.sessions || []);
     } catch (err) {
       console.error("Failed to fetch sessions:", err);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: number) => {
+    if (!window.confirm(`Are you sure you want to delete session #${sessionId}? This action cannot be undone.`)) return;
+    
+    try {
+      const resp = await fetch(`${import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000"}/sessions/${sessionId}`, {
+        method: 'DELETE'
+      });
+      if (resp.ok) {
+        fetchSessions(); // Refresh list
+      } else {
+        alert("Failed to delete session.");
+      }
+    } catch (err) {
+      console.error("Error deleting session:", err);
+      alert("Error deleting session.");
     }
   };
 
@@ -296,6 +314,13 @@ export const Overview: React.FC = () => {
                     className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-md hover:bg-emerald-100 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" /> CSV
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSession(s.id)}
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-md hover:bg-rose-100 transition-colors ml-2"
+                    title="Delete Session"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> DELETE
                   </button>
                 </div>
               </div>
