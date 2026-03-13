@@ -12,7 +12,6 @@ import {
 } from "recharts";
 import { Download } from "lucide-react";
 import { useConnection } from "../../contexts/ConnectionContext";
-import { apiStart, apiStop } from "../../utils/api";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -43,7 +42,6 @@ interface AxPoint {
 
 const Acceleration = () => {
   const { data, connected, history, clearView, viewFilters } = useConnection();
-  const [running, setRunning] = useState(false);
 
   // Dynamic Thresholds State (Numeric for logic)
   const [uml, setUml] = useState(DEFAULT_UML);
@@ -105,69 +103,13 @@ const Acceleration = () => {
     }
   }, [data?.y]);
 
-  // Timer State
-  const [timer, setTimer] = useState("00:00:00");
-  const startTimeRef = useRef<number | null>(null);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
   // Full History for Export (use global history instead)
   const fullHistoryRef = useRef<AxPoint[]>([]);
   useEffect(() => {
     fullHistoryRef.current = accelData;
   }, [accelData]);
 
-  const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const h = Math.floor(totalSeconds / 3600).toString().padStart(2, "0");
-    const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, "0");
-    const s = (totalSeconds % 60).toString().padStart(2, "0");
-    return `${h}:${m}:${s}`;
-  };
-
-  useEffect(() => {
-    if (running && !startTimeRef.current) {
-      startTimeRef.current = Date.now();
-      timerIntervalRef.current = setInterval(() => {
-        if (startTimeRef.current) {
-          const elapsed = Date.now() - startTimeRef.current;
-          setTimer(formatTime(elapsed));
-        }
-      }, 1000);
-    } else if (!running) {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      startTimeRef.current = null;
-      // Removed setTimer("00:00:00") to persist last duration
-    }
-    return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    };
-  }, [running]);
-
   // Removed redundant update effect that maintained local accelData state
-
-
-  const startStream = async () => {
-    try {
-      await apiStart();
-      setRunning(true);
-      // Reset timer only upon starting a new session
-      setTimer("00:00:00");
-    } catch (err) {
-      console.error("startStream error", err);
-    }
-  };
-
-  const stopStream = async () => {
-    try {
-      await apiStop();
-    } catch (err) {
-      console.warn("apiStop failed", err);
-    }
-    setRunning(false);
-  };
 
   /* 
    * Shifted to Backend Export 
@@ -230,26 +172,11 @@ const Acceleration = () => {
         </div>
 
         <div className="flex items-center gap-6">
-          {/* Timer Display */}
-          <div className="bg-white border-2 border-gray-200 px-4 py-1.5 rounded-md font-mono font-bold text-lg text-blue-600 tracking-tighter shadow-sm">
-            {timer}
-          </div>
-
           <button
             onClick={() => clearView('acceleration')}
             className="px-6 py-2 bg-white text-rose-600 border border-rose-100 rounded-md font-bold text-sm shadow-md hover:bg-rose-50 transition-all uppercase ring-2 ring-rose-50"
           >
             CLEAR CHART
-          </button>
-
-          <button
-            onClick={running ? stopStream : startStream}
-            className={`px-8 py-2 rounded-md font-bold text-sm transition-all shadow-lg active:scale-95 uppercase ${running
-              ? "bg-rose-600 text-white ring-2 ring-rose-100"
-              : "bg-emerald-600 text-white ring-2 ring-emerald-100"
-              }`}
-          >
-            {running ? "STOP SYSTEM" : "START SYSTEM"}
           </button>
         </div>
       </div>

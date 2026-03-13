@@ -18,11 +18,9 @@ export default function RailCondition() {
     }
   }, [data?.y]);
 
-  // AI / Laser Mode State
-  const [analysisMode, setAnalysisMode] = useState<"laser" | "yolo">("laser");
+  // AI Models
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
-  const [threshold, setThreshold] = useState(220); // Default threshold
 
   // Camera State
   const [selectedCamIndex, setSelectedCamIndex] = useState(0);
@@ -73,18 +71,6 @@ export default function RailCondition() {
       })
       .catch((err) => console.error("Failed to list models", err));
   }, []);
-
-  // Handle Mode Switch
-  const handleModeChange = async (mode: "laser" | "yolo") => {
-    setAnalysisMode(mode);
-    try {
-      await fetch(`${API_BASE}/condition/mode`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode })
-      });
-    } catch (e) { console.error("Failed to set mode", e); }
-  };
 
   // Handle Model Selection
   const handleModelSelect = async (path: string) => {
@@ -191,17 +177,6 @@ export default function RailCondition() {
     }
   };
 
-  // Handle Threshold Change
-  const handleThresholdChange = async () => {
-    try {
-      await fetch(`${API_BASE}/condition/threshold`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold: Number(threshold) })
-      });
-    } catch (e) { console.error("Failed to set threshold", e); }
-  };
-
   return (
     <div className="p-6 space-y-6">
       {/* HEADER: Chainage & Timestamp */}
@@ -213,22 +188,6 @@ export default function RailCondition() {
               {connected ? "LIVE" : "DISCONNECTED"}
             </span>
           </div>
-        </div>
-
-        {/* MODE SELECTION */}
-        <div className="flex bg-gray-100 p-1 rounded-lg">
-          <button
-            onClick={() => handleModeChange("laser")}
-            className={`px-4 py-2 rounded-md text-sm font-bold transition ${analysisMode === "laser" ? "bg-white shadow text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
-          >
-            Laser Profile
-          </button>
-          <button
-            onClick={() => handleModeChange("yolo")}
-            className={`px-4 py-2 rounded-md text-sm font-bold transition ${analysisMode === "yolo" ? "bg-white shadow text-purple-600" : "text-gray-500 hover:text-gray-700"}`}
-          >
-            Component AI
-          </button>
         </div>
 
         <div className="flex gap-8 text-right">
@@ -265,41 +224,20 @@ export default function RailCondition() {
           </select>
         </div>
 
-        {/* MODE SPECIFIC CONTROLS */}
-        {analysisMode === "laser" && (
-          <div className="bg-blue-50 border border-blue-100 rounded p-3 flex items-center gap-4 flex-1">
-            <span className="text-sm font-bold text-blue-700">Laser Threshold:</span>
-            <input
-              type="number"
-              value={threshold}
-              onChange={(e) => setThreshold(Number(e.target.value))}
-              className="w-20 p-2 border rounded text-sm"
-            />
-            <button
-              onClick={handleThresholdChange}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-blue-700"
-            >
-              Set
-            </button>
-          </div>
-        )}
-
-        {/* AI OPTIONS BAR */}
-        {analysisMode === "yolo" && (
-          <div className="bg-purple-50 border border-purple-100 rounded p-3 flex items-center gap-4 flex-1">
-            <span className="text-sm font-bold text-purple-700">AI Model:</span>
-            <select
-              value={selectedModel}
-              onChange={(e) => handleModelSelect(e.target.value)}
-              className="flex-1 p-2 border rounded text-sm"
-            >
-              {models.length === 0 && <option value="">No models found in backend/models_rail</option>}
-              {models.map(m => (
-                <option key={m} value={m}>{m.split('/').pop()}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* AI OPTIONS BAR (always shown) */}
+        <div className="bg-purple-50 border border-purple-100 rounded p-3 flex items-center gap-4 flex-1">
+          <span className="text-sm font-bold text-purple-700">AI Model:</span>
+          <select
+            value={selectedModel}
+            onChange={(e) => handleModelSelect(e.target.value)}
+            className="flex-1 p-2 border rounded text-sm"
+          >
+            {models.length === 0 && <option value="">No models found in backend/models_rail</option>}
+            {models.map(m => (
+              <option key={m} value={m}>{m.split('/').pop()}</option>
+            ))}
+          </select>
+        </div>
 
         {/* UNIFIED BUTTONS */}
         <div className="flex gap-2">
@@ -340,16 +278,13 @@ export default function RailCondition() {
           </div>
         </div>
 
-        {/* Right: Processed Feed (Dynamic) */}
+        {/* Right: Processed Feed (AI Detection) */}
         <div className="bg-black rounded-lg overflow-hidden border-2 border-gray-700 relative aspect-video">
           <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded flex items-center gap-2">
-            <span>{analysisMode === "yolo" ? "AI Detection" : "Laser Mask"}</span>
+            <span>AI Detection</span>
           </div>
           <img
-            src={analysisMode === "yolo"
-              ? `${API_BASE}/video_feed_rail_ai?index=${selectedCamIndex}&t=${reloadKey}`
-              : `${API_BASE}/video_feed_condition_overlay?index=${selectedCamIndex}&t=${reloadKey}`
-            }
+            src={`${API_BASE}/video_feed_rail_ai?index=${selectedCamIndex}&t=${reloadKey}`}
             className="w-full h-full object-cover"
             alt="Processed Feed"
             style={{ display: cameraOn ? 'block' : 'none' }}

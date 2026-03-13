@@ -14,15 +14,11 @@ const ConditionMonitoring: React.FC = () => {
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
-  const [selectedBackendIndex, setSelectedBackendIndex] = useState<number>(2);
+  const CAMERA_INDEX = 2;
 
-  // AI Mode State (always AI now)
-  const [analysisMode, setAnalysisMode] = useState<"ai">("ai");
+  // AI Models
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
-
-  // For display of backend camera list (optional)
-  const [backendDevices, setBackendDevices] = useState<number[]>([]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -54,41 +50,7 @@ const ConditionMonitoring: React.FC = () => {
     };
   }, [recording]);
 
-  useEffect(() => {
-    // Try to fetch backend camera list (non-fatal)
-    (async () => {
-      try {
-        const r = await fetch(`${API_BASE}/camera/list`);
-        if (r.ok) {
-          const j = await r.json();
-          if (Array.isArray(j.cameras)) {
-            let indices = j.cameras.map((c: any) => c.index).filter((x: any) => typeof x === "number");
-            
-            // Guarantee that 0, 1, 2 are always available
-            const forcedIndices = [0, 1, 2];
-            forcedIndices.forEach(idx => {
-              if (!indices.includes(idx)) {
-                indices.push(idx);
-              }
-            });
-            
-            // Sort to look nice
-            indices.sort((a: number, b: number) => a - b);
-            
-            setBackendDevices(indices);
-            
-            if (indices.length > 0) {
-                // preserve current selected index if valid, else default to first
-                setSelectedBackendIndex(prev => indices.includes(prev) ? prev : indices[0]);
-            }
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-    })();
-  }, []);
-
+  // No camera list needed: we always use hardcoded camera index (2) for the rear-facing camera.
   // Fetch models on mount
   useEffect(() => {
     fetch(`${API_BASE}/models/list`)
@@ -156,11 +118,10 @@ const ConditionMonitoring: React.FC = () => {
       try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { }
 
       // 4. Start Camera Hardware
-      const body = { index: selectedBackendIndex };
       await fetch(`${API_BASE}/camera/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ index: CAMERA_INDEX }),
       });
 
       // 5. Reload MJPEG src and mark on
@@ -190,7 +151,7 @@ const ConditionMonitoring: React.FC = () => {
       await fetch(`${API_BASE}/camera/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: selectedBackendIndex }),
+        body: JSON.stringify({ index: CAMERA_INDEX }),
       });
       setReloadKey((k) => k + 1);
     } catch (e: any) {
@@ -238,13 +199,7 @@ const ConditionMonitoring: React.FC = () => {
         </div>
         <div className="bg-gray-50 border border-gray-200 rounded p-3 flex items-center gap-4">
           <span className="text-sm font-bold text-gray-700">Camera Source:</span>
-          <select 
-            value={selectedBackendIndex} 
-            onChange={(e) => setSelectedBackendIndex(Number(e.target.value))}
-            className="p-2 border rounded text-sm"
-          >
-            {backendDevices.map((i) => <option key={i} value={i}>{`Camera Index ${i}`}</option>)}
-          </select>
+          <span className="text-sm">Camera Index 2 (fixed)</span>
         </div>
 
         <div className="flex gap-2">
@@ -278,7 +233,7 @@ const ConditionMonitoring: React.FC = () => {
           {cameraOn ? (
             <img
               key={`raw-${reloadKey}`}
-              src={`${API_BASE}/video_feed?index=${selectedBackendIndex}&cache=${reloadKey}`}
+              src={`${API_BASE}/video_feed?index=${CAMERA_INDEX}&cache=${reloadKey}`}
               alt="Raw Feed"
               style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />
@@ -295,7 +250,7 @@ const ConditionMonitoring: React.FC = () => {
           {cameraOn ? (
             <img
               key={`proc-${reloadKey}`}
-              src={`${API_BASE}/video_feed_yolo?index=${selectedBackendIndex}&cache=${reloadKey}`}
+              src={`${API_BASE}/video_feed_yolo?index=${CAMERA_INDEX}&cache=${reloadKey}`}
               alt="Processed Feed"
               style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
             />

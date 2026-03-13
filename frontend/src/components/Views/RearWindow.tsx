@@ -10,10 +10,6 @@ const RearWindow: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // camera selection
-  const [cameraIndex, setCameraIndex] = useState<number>(0);
-  const [cameraList, setCameraList] = useState<number[]>([0]);
-
   // timer
   const [timer, setTimer] = useState("00:00:00");
   const startTimeRef = useRef<number | null>(null);
@@ -60,55 +56,6 @@ const RearWindow: React.FC = () => {
 
 
 
-  // try loading camera list from backend
-  useEffect(() => {
-
-    (async () => {
-
-      try {
-
-        const r = await fetch(`${API_BASE}/camera/list`);
-
-        if (r.ok) {
-          const j = await r.json();
-
-          if (Array.isArray(j.cameras)) {
-
-            let indices = j.cameras
-              .map((c: any) => c.index)
-              .filter((x: any) => typeof x === "number");
-
-            // Guarantee that 0, 1, 2 are always available
-            const forcedIndices = [0, 1, 2];
-            forcedIndices.forEach(idx => {
-              if (!indices.includes(idx)) {
-                indices.push(idx);
-              }
-            });
-
-            // Sort to look nice
-            indices.sort((a: number, b: number) => a - b);
-
-            if (indices.length) {
-              setCameraList(indices);
-              // preserve current selected index if valid, else default to first
-              setCameraIndex(prev => indices.includes(prev) ? prev : indices[0]);
-            }
-
-          }
-
-        }
-
-      } catch (e) {
-        console.log("camera list unavailable");
-      }
-
-    })();
-
-  }, []);
-
-
-
   const startRecording = async () => {
     setBusy(true);
     setError(null);
@@ -148,7 +95,7 @@ const RearWindow: React.FC = () => {
       const camStart = await fetch(`${API_BASE}/camera/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: cameraIndex })
+        body: JSON.stringify({ index: 0 })
       });
 
       if (!camStart.ok) {
@@ -184,7 +131,7 @@ const RearWindow: React.FC = () => {
       await fetch(`${API_BASE}/camera/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: cameraIndex })
+        body: JSON.stringify({ index: 0 })
       });
       setReloadKey(k => k + 1);
     } catch (e: any) {
@@ -234,18 +181,6 @@ const RearWindow: React.FC = () => {
 
 
       <div className="flex flex-wrap items-center gap-4 mb-4">
-        <div className="bg-gray-50 border border-gray-200 rounded p-3 flex items-center gap-4">
-          <span className="text-sm font-bold text-gray-700">Camera Source:</span>
-          <select 
-            value={cameraIndex} 
-            onChange={(e) => setCameraIndex(Number(e.target.value))}
-            className="p-2 border rounded text-sm"
-            disabled={cameraOn}
-          >
-            {cameraList.map((i) => <option key={i} value={i}>{`Camera Index ${i}`}</option>)}
-          </select>
-        </div>
-
         <div className="flex gap-2">
           <button
             onClick={cameraOn ? stopCamera : startCamera}
@@ -294,7 +229,7 @@ const RearWindow: React.FC = () => {
 
           <img
             key={reloadKey}
-            src={`${API_BASE}/video_feed?index=${cameraIndex}&cache=${reloadKey}`}
+            src={`${API_BASE}/video_feed?index=0&cache=${reloadKey}`}
             alt="camera stream"
             style={{ width: "100%", height: "auto", display: "block" }}
           />
