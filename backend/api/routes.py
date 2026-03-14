@@ -228,7 +228,7 @@ def get_session_telemetry(session_id: int):
 
 @router.get("/sessions/{session_id}/report")
 def get_session_report(session_id: str):
-    """Generate and download a PDF inspection report for a specific session."""
+    """Generate a PDF report and open the folder in Finder."""
     try:
         desktop_path = os.path.expanduser("~/Desktop")
         session_dir = os.path.join(desktop_path, "report", str(session_id))
@@ -238,11 +238,16 @@ def get_session_report(session_id: str):
 
         pdf_path = report_service.report_gen.generate_folder_report(session_dir)
         
-        return FileResponse(
-            path=pdf_path,
-            filename=os.path.basename(pdf_path),
-            media_type='application/pdf'
-        )
+        # Open folder in Finder (MacOS specific as requested)
+        if os.path.exists(session_dir):
+            os.system(f"open '{session_dir}'")
+
+        return {
+            "status": "success",
+            "message": "Report generated successfully",
+            "pdf_path": pdf_path,
+            "session_dir": session_dir
+        }
     except Exception as e:
         logger.error(f"Error generating report for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -270,9 +275,28 @@ def export_report():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/reports/folders")
+def list_report_folders():
+    """List all timestamped session directories in ~/Desktop/report/."""
+    try:
+        desktop_path = os.path.expanduser("~/Desktop")
+        report_root = os.path.join(desktop_path, "report")
+        if not os.path.exists(report_root):
+            return {"folders": []}
+        
+        folders = [d for d in os.listdir(report_root) 
+                  if os.path.isdir(os.path.join(report_root, d))]
+        # Sort by timestamp (newest first)
+        folders.sort(reverse=True)
+        return {"folders": folders}
+    except Exception as e:
+        logger.error(f"Error listing report folders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/reports/latest")
 def get_latest_report():
-    """Generate and return the report for the latest available session folder."""
+    """Generate latest report and open folder in Finder."""
     try:
         latest_dir = report_session.get_latest_report_dir()
         if not latest_dir:
@@ -280,11 +304,16 @@ def get_latest_report():
 
         pdf_path = report_service.report_gen.generate_folder_report(latest_dir)
         
-        return FileResponse(
-            path=pdf_path,
-            filename=os.path.basename(pdf_path),
-            media_type='application/pdf'
-        )
+        # Open folder in Finder
+        if os.path.exists(latest_dir):
+            os.system(f"open '{latest_dir}'")
+
+        return {
+            "status": "success",
+            "message": "Latest report generated successfully",
+            "pdf_path": pdf_path,
+            "session_dir": latest_dir
+        }
     except Exception as e:
         logger.error(f"Error generating latest report: {e}")
         raise HTTPException(status_code=500, detail=str(e))

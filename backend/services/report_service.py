@@ -15,6 +15,7 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     Image, PageBreak
 )
+from typing import Optional, List, Any
 
 # Shared session context so we don't assume finding the newest folder by mtime
 # but instead use the explicitly provided get_report_dir() if passed.
@@ -23,12 +24,14 @@ try:
 except ImportError:
     get_report_dir = None
 
+from backend.services.ai_service import ai_service
+
 logger = logging.getLogger("itms.report_service")
 
 class ReportGenerator:
     """Compact PDF report generator using pandas, exactly structured for specific charts."""
 
-    def generate_folder_report(self, folder_path: str = None) -> str:
+    def generate_folder_report(self, folder_path: Optional[str] = None) -> str:
         print("\n--- INSIDE ReportGenerator.generate_folder_report ---")
         # 1. Use session folder
         if not folder_path:
@@ -82,7 +85,7 @@ class ReportGenerator:
                 acc_path = fallback_accs[0]
 
         total_defects = 0
-        df_defects = None
+        df_defects: Optional[pd.DataFrame] = None
         if os.path.exists(yolo_path):
             try:
                 df_defects = pd.read_csv(yolo_path)
@@ -152,15 +155,41 @@ class ReportGenerator:
             ['FONTSIZE', (0, 0), (-1, -1), 10],
         ]))
         elements.append(t_sum)
-        elements.append(PageBreak())
+        elements.append(Spacer(1, 20))
 
-        print("Completed Page 1 (Session Summary).")
+        # ==========================================
+        # AI MAINTENANCE SUGGESTIONS (Integrated in Page 1)
+        # ==========================================
+        print("Gathering data for AI Suggestions...")
+        session_data = {
+            "total_defects": int(total_defects),
+            "min_clearance": str(min_clearance),
+            "max_acceleration": str(max_acc),
+            "clearance_classes": {k: int(v) for k, v in class_counts.items()}
+        }
+        
+        print("Calling Gemini for maintenance suggestions...")
+        ai_suggestions = ai_service.generate_industrial_report(session_data)
+        
+        elements.append(Paragraph("AI Maintenance Suggestions", h2_style))
+        # Style for suggestions box
+        sugg_style = ParagraphStyle('Suggestion', parent=normal_style, leftIndent=10, bulletIndent=0)
+        for line in ai_suggestions.split('\n'):
+            line = line.strip()
+            if not line: continue
+            # Handle bullet points
+            cleaned_line = line.lstrip('-').lstrip('*').strip()
+            elements.append(Paragraph(f"• {cleaned_line}", sugg_style))
+            elements.append(Spacer(1, 4))
+
+        elements.append(PageBreak())
+        print("Completed Page 1 (Session Summary + AI Suggestions).")
 
         # ==========================================
         # PAGE 2: Defect Summary (Top 10)
         # ==========================================
         print("Starting Page 2 (Defect Summary)...")
-        elements.append(Paragraph("Top 10 Defect Detections", h2_style))
+        elements.append(Paragraph("Detailed Defect Detections", h2_style))
         if df_defects is not None and not df_defects.empty:
             df_def_clean = df_defects.copy()
             
@@ -193,7 +222,7 @@ class ReportGenerator:
                 conf_val = f"{row[conf_c]:.2f}" if conf_c and pd.notna(row[conf_c]) else "N/A"
                 defect_table_data.append([t_val, c_val, l_val, conf_val])
 
-            t_def = Table(defect_table_data, colWidths=[80, 80, 150, 80])
+            t_def = Table(defect_table_data, colWidths=[120, 80, 130, 80])
             t_def.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#8b0000')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -205,6 +234,70 @@ class ReportGenerator:
         else:
             elements.append(Paragraph("No defects detected or log file missing.", normal_style))
 
+        # ==========================================
+        # CRITICAL INFRINGEMENTS (UML/PML List)
+        # ==========================================
+        if df_inf is not None and not df_inf.empty:
+            elements.append(Spacer(1, 20))
+            elements.append(Paragraph("Critical Clearances (UML & PML)", h2_style))
+            
+            inf_list_data = [["Chainage (m)", "Lidar Source", "Clearance (m)", "Category"]]
+            
+            # Find relevant columns
+            chain_c = next((c for c in df_inf.columns if c.lower() == 'y' or 'chain' in c.lower()), None)
+            lcols = [c for c in ['lidar1_m', 'lidar2_m', 'lidar3_m'] if c in df_inf.columns]
+            class_cols = [c for c in ['class_1', 'class_2', 'class_3'] if c in df_inf.columns]
+
+            if chain_c and lcols:
+                critical_points = []
+                for idx, row in df_inf.iterrows():
+                    for i, lcol in enumerate(lcols):
+                        cls_col = f"class_{i+1}"
+                        if cls_col in df_inf.columns:
+                            cat = str(row[cls_col])
+                            if cat in ["UML", "PML"]:
+                                critical_points.append({
+                                    "chainage": row[chain_c],
+                                    "source": lcol.replace('_m', '').upper(),
+                                    "val": row[lcol],
+                                    "cat": cat
+                                })
+                
+                # Sort by severity then sub-sort by chainage
+                critical_points.sort(key=lambda x: (0 if x['cat'] == 'UML' else 1, x['chainage']))
+                
+                # Take top 10 most critical or representative
+                for p in critical_points[:15]:
+                    inf_list_data.append([
+                        f"{float(p['chainage']):.2f}",
+                        p['source'],
+                        f"{float(p['val']):.3f}",
+                        p['cat']
+                    ])
+                
+                if len(inf_list_data) > 1:
+                    t_inf = Table(inf_list_data, colWidths=[100, 100, 100, 110])
+                    t_inf.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d35400')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                        ('PADDING', (0, 0), (-1, -1), 6),
+                        ('FONTSIZE', (0, 0), (-1, -1), 10),
+                        # Conditional coloring for UML rows
+                        # (Note: ReportLab doesn't support easy conditional row coloring in a single call,
+                        #  but we can iterate and set BACKGROUND for specific cells if needed)
+                    ]))
+                    # Color UML rows red
+                    for i in range(1, len(inf_list_data)):
+                        if inf_list_data[i][3] == "UML":
+                            t_inf.setStyle(TableStyle([('BACKGROUND', (3, i), (3, i), colors.red)]))
+                        else:
+                            t_inf.setStyle(TableStyle([('BACKGROUND', (3, i), (3, i), colors.orange)]))
+
+                    elements.append(t_inf)
+                else:
+                    elements.append(Paragraph("No UML or PML infringements detected.", normal_style))
+
         elements.append(PageBreak())
 
         # ==========================================
@@ -213,23 +306,19 @@ class ReportGenerator:
         elements.append(Paragraph("Structure Clearance Profile", h2_style))
         if df_inf is not None and not df_inf.empty:
             try:
-                # Need to plot vs chainage (y-column usually named 'y' or 'chainage')
+                # Need to plot vs chainage
                 chain_c = next((c for c in df_inf.columns if c.lower() == 'y' or 'chain' in c.lower()), None)
                 lcols = [c for c in ['lidar1_m', 'lidar2_m', 'lidar3_m'] if c in df_inf.columns]
                 
                 if chain_c and len(lcols) > 0:
                     df_chart = df_inf.dropna(subset=[chain_c]).copy()
-                    
-                    # Downsample if very dense (> 2000 points)
                     if len(df_chart) > 2000:
                         df_chart = df_chart.iloc[::(len(df_chart)//1000)]
                     
                     x_vals = df_chart[chain_c]
                     
-                    # Avoid plot if only 1 unique X
                     if x_vals.nunique() > 1:
                         chart_inf_path = os.path.join(folder_path, "report_clearance_chart.png")
-                        # Wide figure
                         plt.figure(figsize=(8, 3.5))
                         
                         colors_lc = ['orange', 'royalblue', 'green']
@@ -237,16 +326,13 @@ class ReportGenerator:
                             y_vals = df_chart[col].replace(0.0, np.nan)
                             plt.plot(x_vals, y_vals, label=str(col).replace('_m','').title(), color=colors_lc[idx % 3], linewidth=0.8, alpha=0.8)
 
-                        # Threshold lines (from default _thresholds in sensors: UML=0.15, PML=0.4 -- but standard is 1.0, 0.8... let's use 0.4 and 0.15)
-                        plt.axhline(y=0.4, color='gold', linestyle='--', linewidth=0.8, label='PML Threshold')
-                        plt.axhline(y=0.15, color='red', linestyle='--', linewidth=0.8, label='UML Threshold')
+                        plt.axhline(y=0.4, color='gold', linestyle='--', linewidth=0.8, label='PML (0.4m)')
+                        plt.axhline(y=0.15, color='red', linestyle='--', linewidth=0.8, label='UML (0.15m)')
 
                         plt.title("Clearance vs Chainage", fontsize=10, fontweight='bold')
                         plt.xlabel("Chainage (m)", fontsize=9)
                         plt.ylabel("Clearance (m)", fontsize=9)
-                        # Auto scale X
                         plt.xlim([float(x_vals.min()), float(x_vals.max())])
-                        
                         plt.grid(True, linestyle='--', alpha=0.5)
                         plt.legend(fontsize=8, loc='upper right')
                         plt.tight_layout()
@@ -255,22 +341,14 @@ class ReportGenerator:
 
                         elements.append(Image(chart_inf_path, width=500, height=220))
                         elements.append(Spacer(1, 15))
-                    else:
-                        elements.append(Paragraph("Not enough chainage variation to plot clearance.", normal_style))
                 else:
-                    elements.append(Paragraph("Missing chainage or lidar columns for chart.", normal_style))
+                    elements.append(Paragraph("Missing data for clearance plot.", normal_style))
             except Exception as e:
                 logger.error(f"Error plotting clearance: {e}")
-                elements.append(Paragraph("Failed to generate clearance chart.", normal_style))
-        else:
-            elements.append(Paragraph("No infringement data available for chart.", normal_style))
-            elements.append(Spacer(1, 15))
-
 
         elements.append(Paragraph("Vehicle Acceleration Profile", h2_style))
         if df_acc is not None and not df_acc.empty:
             try:
-                # Find columns
                 ax_c = next((c for c in df_acc.columns if c.lower() in ['acc x', 'accx', 'ax']), None)
                 ay_c = next((c for c in df_acc.columns if c.lower() in ['acc y', 'accy', 'ay']), None)
                 az_c = next((c for c in df_acc.columns if c.lower() in ['acc z', 'accz', 'az']), None)
@@ -278,52 +356,30 @@ class ReportGenerator:
 
                 if chain_c and any([ax_c, ay_c, az_c]):
                     df_chart = df_acc.dropna(subset=[chain_c]).copy()
-                    
-                    # Downsample if dense
                     if len(df_chart) > 3000:
                         df_chart = df_chart.iloc[::(len(df_chart)//1500)]
 
                     x_vals = df_chart[chain_c]
-
                     if x_vals.nunique() > 1:
                         chart_acc_path = os.path.join(folder_path, "report_accel_chart.png")
                         plt.figure(figsize=(8, 3.5))
                         
-                        if ax_c: plt.plot(x_vals, df_chart[ax_c], label="Acc X", color='tomato', linewidth=0.6, alpha=0.7)
-                        if ay_c: plt.plot(x_vals, df_chart[ay_c], label="Acc Y", color='mediumseagreen', linewidth=0.6, alpha=0.7)
-                        if az_c: plt.plot(x_vals, df_chart[az_c], label="Acc Z", color='royalblue', linewidth=0.6, alpha=0.7)
+                        if ax_c: plt.plot(x_vals, df_chart[ax_c], label="X-Axis", color='tomato', linewidth=0.6, alpha=0.7)
+                        if ay_c: plt.plot(x_vals, df_chart[ay_c], label="Y-Axis", color='mediumseagreen', linewidth=0.6, alpha=0.7)
+                        if az_c: plt.plot(x_vals, df_chart[az_c], label="Z-Axis", color='royalblue', linewidth=0.6, alpha=0.7)
 
-                        plt.title("Acceleration vs Chainage", fontsize=10, fontweight='bold')
+                        plt.title("Vibration Multi-Axis Profile", fontsize=10, fontweight='bold')
                         plt.xlabel("Chainage (m)", fontsize=9)
-                        plt.ylabel("Acceleration (m/s²)", fontsize=9)
-                        
+                        plt.ylabel("Acc (m/s²)", fontsize=9)
                         plt.xlim([float(x_vals.min()), float(x_vals.max())])
-                        # Auto scale Y to data
-                        y_vals = []
-                        if ax_c: y_vals.extend(df_chart[ax_c].dropna().tolist())
-                        if ay_c: y_vals.extend(df_chart[ay_c].dropna().tolist())
-                        if az_c: y_vals.extend(df_chart[az_c].dropna().tolist())
-                        if y_vals:
-                            ymin, ymax = min(y_vals), max(y_vals)
-                            padding = (ymax - ymin) * 0.1
-                            plt.ylim([ymin - padding, ymax + padding])
-
                         plt.grid(True, linestyle='--', alpha=0.5)
                         plt.legend(fontsize=8, loc='upper right')
                         plt.tight_layout()
                         plt.savefig(chart_acc_path, dpi=120)
                         plt.close()
-
                         elements.append(Image(chart_acc_path, width=500, height=220))
-                    else:
-                        elements.append(Paragraph("Not enough chainage variation to plot acceleration.", normal_style))
-                else:
-                    elements.append(Paragraph("Missing chainage or acceleration columns for chart.", normal_style))
             except Exception as e:
                 logger.error(f"Error plotting acceleration: {e}")
-                elements.append(Paragraph("Failed to generate acceleration chart.", normal_style))
-        else:
-            elements.append(Paragraph("No acceleration data available for chart.", normal_style))
 
         # ==========================================
         # PAGE 4: Key Evidence Images (Top 5)
@@ -332,25 +388,30 @@ class ReportGenerator:
         snap_dir = os.path.join(folder_path, "defect_snapshots")
         if os.path.isdir(snap_dir):
             snaps = sorted(glob.glob(os.path.join(snap_dir, "*.jpg")))
-            print(f"Found {len(snaps)} snapshots in {snap_dir}")
             if snaps:
                 elements.append(PageBreak())
-                elements.append(Paragraph("Key Evidence Snapshots", h2_style))
+                elements.append(Paragraph("Maintenance Evidence Log", h2_style))
                 elements.append(Spacer(1, 10))
                 
                 # Take up to 5
                 for snap_path in snaps[:5]:
                     snap_name = os.path.basename(snap_path)
+                    
+                    # Try to extract chainage/time from filename or related data
+                    # (Standard naming ITMS often uses: timestamp_chainage_class.jpg)
+                    metadata_text = snap_name
+                    parts = snap_name.split('_')
+                    if len(parts) >= 2:
+                        # Dummy heuristic: [Time | Chainage: XX m]
+                        metadata_text = f"Time: {parts[0]} | Chainage: {parts[1]}m"
+
                     try:
-                        elements.append(Image(snap_path, width=320, height=200))
-                        elements.append(Paragraph(f"<i>{snap_name}</i>", normal_style))
-                        elements.append(Spacer(1, 15))
+                        elements.append(Image(snap_path, width=380, height=220))
+                        elements.append(Paragraph(f"<b>Capture:</b> {metadata_text}", normal_style))
+                        elements.append(Spacer(1, 20))
                     except Exception as e:
                         print(f"Error adding image {snap_name}: {e}")
-                        pass
-        else:
-            print("No snapshot directory found.")
-
+        
         # Build PDF
         print("Building final PDF document...")
         doc.build(elements)
