@@ -378,6 +378,72 @@ class ReportGenerator:
                         plt.savefig(chart_acc_path, dpi=120)
                         plt.close()
                         elements.append(Image(chart_acc_path, width=500, height=220))
+
+                        # --- NEW: Acceleration Peak Table ---
+                        elements.append(Spacer(1, 15))
+                        elements.append(Paragraph("Significant Vibration Peaks", h2_style))
+                        
+                        acc_peak_data = [["Chainage (m)", "Axis", "Acceleration (m/s²)", "Status"]]
+                        
+                        # Calculate peaks: merge axes and sort by absolute value
+                        peak_rows = []
+                        valid_cols = [c for c in [ax_c, ay_c, az_c] if c]
+                        
+                        if not df_acc.empty:
+                            # Iterate through axes to find max absolute values
+                            for _, row in df_acc.iterrows():
+                                for col in valid_cols:
+                                    val = row[col]
+                                    if pd.notna(val):
+                                        axis_label = "X" if col == ax_c else ("Y" if col == ay_c else "Z")
+                                        peak_rows.append({
+                                            "chainage": row[chain_c],
+                                            "axis": axis_label,
+                                            "val": val,
+                                            "abs_val": abs(val)
+                                        })
+                            
+                            # Sort by absolute acceleration and drop duplicates near the same chainage to avoid clutter
+                            peak_rows.sort(key=lambda x: x['abs_val'], reverse=True)
+                            
+                            unique_peaks = []
+                            seen_chainages = []
+                            for p in peak_rows:
+                                # Simple proximity filter: don't show peaks within 0.5m of each other
+                                if not any(abs(p['chainage'] - sc) < 0.5 for sc in seen_chainages):
+                                    unique_peaks.append(p)
+                                    seen_chainages.append(p['chainage'])
+                                if len(unique_peaks) >= 10: break
+
+                            for p in unique_peaks:
+                                # Status based on a dummy threshold of 5.0 m/s^2 for "Alert"
+                                status = "Alert" if p['abs_val'] > 5.0 else "Normal"
+                                acc_peak_data.append([
+                                    f"{float(p['chainage']):.2f}",
+                                    p['axis'],
+                                    f"{float(p['val']):.3f}",
+                                    status
+                                ])
+
+                        if len(acc_peak_data) > 1:
+                            t_acc = Table(acc_peak_data, colWidths=[100, 80, 150, 80])
+                            t_acc.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e4053')),
+                                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                                ('PADDING', (0, 0), (-1, -1), 6),
+                                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                            ]))
+                            # Color Alerts red
+                            for i in range(1, len(acc_peak_data)):
+                                if acc_peak_data[i][3] == "Alert":
+                                    t_acc.setStyle(TableStyle([('TEXTCOLOR', (3, i), (3, i), colors.red), ('FONTNAME', (3, i), (3, i), 'Helvetica-Bold')]))
+                            
+                            elements.append(t_acc)
+                        else:
+                            elements.append(Paragraph("No significant vibration events detected.", normal_style))
+                        # -----------------------------------
+
             except Exception as e:
                 logger.error(f"Error plotting acceleration: {e}")
 

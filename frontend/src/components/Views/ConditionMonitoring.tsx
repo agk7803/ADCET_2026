@@ -12,7 +12,7 @@ const ConditionMonitoring: React.FC = () => {
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
-  const CAMERA_INDEX = 2; // fixed camera index for Condition Monitoring (YOLO)
+  const CAMERA_INDEX = 1; // fixed camera index for Condition Monitoring (YOLO)
 
   // AI Models
   const [models, setModels] = useState<string[]>([]);
