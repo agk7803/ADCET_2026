@@ -52,3 +52,22 @@ def stop_report_session() -> None:
         if _active_dir:
             logger.info(f"Report session ended: {_active_dir}")
         _active_dir = None
+
+
+def get_latest_report_dir() -> str | None:
+    """Scan ~/Desktop/report/ for the most recent subdirectory by name/time."""
+    desktop_path = os.path.expanduser("~/Desktop")
+    report_root = os.path.join(desktop_path, "report")
+    
+    if not os.path.exists(report_root):
+        return None
+        
+    subdirs = [os.path.join(report_root, d) for d in os.listdir(report_root) 
+               if os.path.isdir(os.path.join(report_root, d))]
+               
+    if not subdirs:
+        return None
+        
+    # Folders are named YYYYMMDD_HHMMSS, so alphabetical sort works for latest
+    latest_dir = sorted(subdirs)[-1]
+    return latest_dir

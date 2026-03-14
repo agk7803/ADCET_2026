@@ -269,6 +269,26 @@ def export_report():
         logger.error(f"Report generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/reports/latest")
+def get_latest_report():
+    """Generate and return the report for the latest available session folder."""
+    try:
+        latest_dir = report_session.get_latest_report_dir()
+        if not latest_dir:
+            raise HTTPException(status_code=404, detail="No report folders found on Desktop")
+
+        pdf_path = report_service.report_gen.generate_folder_report(latest_dir)
+        
+        return FileResponse(
+            path=pdf_path,
+            filename=os.path.basename(pdf_path),
+            media_type='application/pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error generating latest report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/sessions/{session_id}/export/csv")
 def export_session_csv(session_id: int):
     """Export session telemetry as a raw CSV file."""
