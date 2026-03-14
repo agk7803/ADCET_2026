@@ -53,7 +53,7 @@ export const Header: React.FC = () => {
       if (!recordingRunning) {
         if (!camerasRunning) await toggleCameras();
         setSessionStartTime(Date.now());
-        await fetch(`${API}/connect`, { method: "POST" }).catch(() => {});
+        await fetch(`${API}/connect`, { method: "POST" }).catch(() => { });
         await Promise.all([
           fetch(`${API}/recording/start`, { method: "POST" }),
           fetch(`${API}/recording/condition/start`, { method: "POST" }),
@@ -120,7 +120,7 @@ export const Header: React.FC = () => {
             className="p-2 rounded-md transition-all hover:bg-gray-100 text-gray-600 border border-gray-200 shadow-sm"
             title="Reload all streams"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
           </button>
 
           {/* Camera Control */}
@@ -146,7 +146,7 @@ export const Header: React.FC = () => {
             onClick={() => {
               const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
               window.open(`${API}/export-report`, "_blank");
-              setTimeout(() => { alert("Report generated successfully!"); }, 500);
+              setTimeout(() => { alert("Data Extracted successfully!"); }, 500);
             }}
             className="px-4 py-2 rounded-md font-bold text-xs uppercase transition-all shadow active:scale-95 flex items-center gap-2 bg-slate-800 text-white hover:bg-slate-900 ml-2"
           >

@@ -30,15 +30,8 @@ def init_writer(path, fps=20.0, resolution=(640, 480)):
         return None
 
 def ensure_dirs(subfolder):
-    """Ensure <session_dir>/video_recording/<subfolder> exists.
-
-    When a recording session is active, sensors.get_session_dir() will return
-    the session folder (timestamped). Otherwise it falls back to config.STORAGE_DIR.
-    """
-    root = sensors.get_session_dir()
-    path = os.path.join(root, "video_recording", subfolder)
-    os.makedirs(path, exist_ok=True)
-    return path
+    """Return the session directory root. Subfolders are no longer used."""
+    return sensors.get_session_dir()
 
 # ------------------------------------------------------------------------------
 # BEZIER CURVE HELPER
@@ -394,7 +387,6 @@ class YoloProcessor:
         
         self.recording = False
         self.writer: Optional[cv2.VideoWriter] = None
-        self.output_dir = ensure_dirs("ConditionMonitoring")
         self.filename = ""
         
         self.lock = threading.Lock()

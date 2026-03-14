@@ -566,19 +566,7 @@ def get_session_dir() -> str:
 
 def _ensure_directories():
     root = get_session_dir()
-    subdirs = [
-        "Acceleration", 
-        "video_recording/RearWindow", 
-        "video_recording/RailCondition", 
-        "video_recording/TrackGeometry", 
-        "video_recording/RailProfile",
-        "video_recording/ConditionMonitoring",
-        "Recordings", 
-        "Infringements"
-    ]
-    for d in subdirs:
-        path = os.path.join(root, d)
-        os.makedirs(path, exist_ok=True)
+    os.makedirs(root, exist_ok=True)
     return root
 
 def record_frame(cam_index, frame):
@@ -604,7 +592,7 @@ def record_frame(cam_index, frame):
     # Lazy init writers
     if cam_index == 0: # RearWindow
         if _video_writer1 is None:
-            path = os.path.join(root, "video_recording", "RearWindow", f"cam0_rear_{ts}.mp4")
+            path = os.path.join(root, f"cam0_rear_{ts}.mp4")
             _video_writer1, _writer1_shape = init_writer(path)
             logger.info(f"Recording Cam 0 to {path}")
         
@@ -617,7 +605,7 @@ def record_frame(cam_index, frame):
         
     elif cam_index == 1: # RailCondition / Profile
         if _video_writer2 is None:
-            path = os.path.join(root, "video_recording", "RailCondition", f"cam1_{ts}.mp4")
+            path = os.path.join(root, f"cam1_{ts}.mp4")
             _video_writer2, _writer2_shape = init_writer(path)
             logger.info(f"Recording Cam 1 to {path}")
             
@@ -655,7 +643,7 @@ def start_recording(file_prefix="session"):
     _ensure_directories()
 
     # 1. Open Serial Log (Acceleration Data) -> NOW CSV
-    filename = os.path.join(session_dir, "Acceleration", f"{file_prefix}_{ts_str}_serial.csv")
+    filename = os.path.join(session_dir, "acceleration.csv")
     try:
         _log_file = open(filename, "w")
         # Write CSV Header

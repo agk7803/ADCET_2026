@@ -72,6 +72,14 @@ class ReportGenerator:
         yolo_path = os.path.join(folder_path, "yolo_defects.csv")
         inf_path = os.path.join(folder_path, "infringement.csv")
         acc_path = os.path.join(folder_path, "acceleration.xlsx")
+        # Fallbacks for acceleration
+        if not os.path.exists(acc_path):
+            acc_path = os.path.join(folder_path, "acceleration.csv")
+        if not os.path.exists(acc_path):
+            # Check for any .csv with 'acc' or 'serial' in name as last resort
+            fallback_accs = glob.glob(os.path.join(folder_path, "*acc*.csv")) + glob.glob(os.path.join(folder_path, "*serial*.csv"))
+            if fallback_accs:
+                acc_path = fallback_accs[0]
 
         total_defects = 0
         df_defects = None
@@ -108,7 +116,11 @@ class ReportGenerator:
         df_acc = None
         if os.path.exists(acc_path):
             try:
-                df_acc = pd.read_excel(acc_path)
+                if acc_path.endswith('.xlsx'):
+                    df_acc = pd.read_excel(acc_path)
+                else:
+                    df_acc = pd.read_csv(acc_path)
+                    
                 if not df_acc.empty:
                     acc_cols = [col for col in df_acc.columns if 'acc' in col.lower() or 'ax' in col.lower() or 'ay' in col.lower() or 'az' in col.lower()]
                     if acc_cols:
@@ -116,7 +128,7 @@ class ReportGenerator:
                         if pd.notna(max_val):
                             max_acc = f"{max_val:.3f} m/s²"
             except Exception as e:
-                logger.error(f"Error reading acceleration.xlsx: {e}")
+                logger.error(f"Error reading acceleration file {acc_path}: {e}")
 
         # Summary Table
         elements.append(Paragraph("Key Session Metrics", h2_style))
