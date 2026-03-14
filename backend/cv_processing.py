@@ -464,7 +464,7 @@ class YoloProcessor:
                     start_label = label.lower()
 
                     # Explicit known defect class names (user provided)
-                    defect_names = {"broken_sleeper", "missing_clips", "cracked_rail"}
+                    defect_names = {"broken_sleeper", "missing_clip", "cracked_rail"}
                     if start_label in defect_names:
                         is_defect = True
                     # Also consider any obvious defect keywords as fallback
