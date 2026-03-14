@@ -13,7 +13,17 @@ import { useConnection } from "../../contexts/ConnectionContext";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 export default function TrackGeometry() {
-  const { data, connected, systemLive, history, latestGaugePx, clearView, viewFilters } = useConnection();
+  const { 
+    data, 
+    connected, 
+    systemLive, 
+    history, 
+    latestGaugePx, 
+    clearView, 
+    viewFilters,
+    camerasRunning,
+    recordingRunning 
+  } = useConnection();
 
   // Calibration State
   const [calibrationPx, setCalibrationPx] = useState<number | "">(100); // Pixels for 1676mm
@@ -43,9 +53,6 @@ export default function TrackGeometry() {
       });
   }, [history, calibrationPx, viewFilters]);
 
-  const [cameraOn, setCameraOn] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   // Timer State
@@ -63,14 +70,14 @@ export default function TrackGeometry() {
 
   // Timer effect
   useEffect(() => {
-    if (recording && !startTimeRef.current) {
+    if (recordingRunning && !startTimeRef.current) {
       startTimeRef.current = Date.now();
       timerIntervalRef.current = window.setInterval(() => {
         if (startTimeRef.current) {
           setTimer(formatTime(Date.now() - startTimeRef.current));
         }
       }, 1000);
-    } else if (!recording) {
+    } else if (!recordingRunning) {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
@@ -81,7 +88,7 @@ export default function TrackGeometry() {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [recording]);
+  }, [recordingRunning]);
 
   const [cameras, setCameras] = useState<any[]>([]);
   const [selectedCamIndex, setSelectedCamIndex] = useState(0);
@@ -92,23 +99,15 @@ export default function TrackGeometry() {
       .then(res => res.json())
       .then(data => {
         let fetchedCameras = data.cameras || [];
-        
-        // Guarantee that 0, 1, 2 are always available as options, even if the probe misses them
         const forcedIndices = [0, 1, 2];
         forcedIndices.forEach(idx => {
           if (!fetchedCameras.find((c: any) => c.index === idx)) {
             fetchedCameras.push({ index: idx, name: `Camera ${idx}` });
           }
         });
-        
-        // Sort them just so they look nice in the dropdown
         fetchedCameras.sort((a: any, b: any) => a.index - b.index);
-
         setCameras(fetchedCameras);
-        
-        // Default sensibly based on availability instead of hardcoded numbers
         if (fetchedCameras.length > 0) {
-          // Keep whatever is currently selected if it's valid, else default to 0
           setSelectedCamIndex(prev => fetchedCameras.find((c: any) => c.index === prev) ? prev : fetchedCameras[0].index);
         }
       })
@@ -117,93 +116,37 @@ export default function TrackGeometry() {
 
   const localChainage = data?.y ?? 0;
 
-  // ... rest of the component ...
-
-  const startRecording = async () => {
-    setBusy(true);
-    try {
-      await fetch(`${API_BASE}/recording/geometry/start`, { method: "POST" });
-      setRecording(true);
-    } catch (e: any) {
-      console.error(e);
-      alert("Failed to start recording");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stopRecording = async () => {
-    setBusy(true);
-    try {
-      await fetch(`${API_BASE}/recording/geometry/stop`, { method: "POST" });
-      setRecording(false);
-    } catch (e: any) {
-      console.error(e);
-      alert("Failed to stop recording");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startCamera = async () => {
-    setBusy(true);
-    try {
-      await fetch(`${API_BASE}/camera/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ index: selectedCamIndex }) });
-      setTimer("00:00:00");
-      setCameraOn(true);
-      setReloadKey((p) => p + 1);
-    } catch (e: any) {
-      console.error(e);
-      alert("Failed to start camera");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stopCamera = async () => {
-    setBusy(true);
-    try {
-      if (recording) {
-        await fetch(`${API_BASE}/recording/geometry/stop`, { method: "POST" });
-        setRecording(false);
-      }
-      await fetch(`${API_BASE}/camera/stop`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ index: selectedCamIndex }) });
-      setCameraOn(false);
-    } catch (e: any) {
-      console.error(e);
-      alert("Failed to stop camera");
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  useEffect(() => {
+    const handleReload = () => {
+      setReloadKey(k => k + 1);
+    };
+    window.addEventListener("reload-streams", handleReload);
+    return () => {
+      window.removeEventListener("reload-streams", handleReload);
+    };
+  }, []);
 
   const exportCSV = () => {
-    if (plotData.length === 0) { // Changed plotDataRef.current to plotData
+    if (plotData.length === 0) {
       alert("No data to export");
       return;
     }
-
-    // Header
     const headers = ["Timestamp", "Chainage", "Gyro X", "Gyro Y", "Gyro Z", "Gauge (px)", "Gauge (mm)", "Deviation (mm)"];
-    const rows = plotData.map(pt => // Changed plotDataRef.current to plotData
+    const rows = plotData.map(pt =>
       [pt.time, pt.chainage, pt.gx, pt.gy, pt.gz, pt.gaugePx, pt.gaugeMm, pt.deviation].join(",")
     );
-
     const csvContent = "data:text/csv;charset=utf-8,"
       + headers.join(",") + "\n"
       + rows.join("\n");
-
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "track_geometry_data.csv"); // Renamed file
+    link.setAttribute("download", "track_geometry_data.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Summary Statistics
   const stats = useMemo(() => {
     if (plotData.length === 0) return { avg: "0.0", min: "0.0", max: "0.0", devMax: "0.0" };
     const values = plotData.map(p => parseFloat(p.gaugeMm));
@@ -219,8 +162,6 @@ export default function TrackGeometry() {
 
   return (
     <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
-
-      {/* NEW PREMIUM HEADER */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
           <div>
@@ -252,7 +193,7 @@ export default function TrackGeometry() {
                 <select
                   value={selectedCamIndex}
                   onChange={(e) => setSelectedCamIndex(Number(e.target.value))}
-                  disabled={cameraOn}
+                  disabled={camerasRunning}
                   className="bg-gray-50 text-gray-800 font-bold text-sm border border-gray-200 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed w-28 appearance-none"
                   style={{ backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 20 20\'%3E%3Cpath stroke=\'%236b7280\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'1.5\' d=\'m6 8 4 4 4-4\'/%3E%3C/svg%3E")', backgroundPosition: 'right .5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em', paddingRight: '2.5rem' }}
                 >
@@ -264,7 +205,7 @@ export default function TrackGeometry() {
                     ))
                   )}
                 </select>
-                {cameraOn && (
+                {camerasRunning && (
                   <div className="absolute top-full left-0 mt-1 w-full text-[9px] text-rose-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                     Stop Camera to Change
                   </div>
@@ -274,7 +215,6 @@ export default function TrackGeometry() {
           </div>
         </div>
 
-        {/* CALIBRATION & LIVE GAUGE CARD */}
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Gauge Calibration</span>
@@ -300,7 +240,6 @@ export default function TrackGeometry() {
           </div>
         </div>
 
-        {/* STATS SUMMARY CARD */}
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 grid grid-cols-2 gap-4">
           <div className="flex flex-col justify-center border-r border-gray-50 pr-4">
             <span className="text-[10px] text-gray-400 font-semibold uppercase">Avg. Gauge</span>
@@ -315,7 +254,6 @@ export default function TrackGeometry() {
         </div>
       </div>
 
-      {/* VIDEO FEEDS - SLEEKER GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <div className="group bg-gray-900 rounded-2xl overflow-hidden border border-gray-800 shadow-2xl relative transition-all hover:ring-2 hover:ring-blue-500/50">
           <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -324,7 +262,7 @@ export default function TrackGeometry() {
               <span>GEOMETRY RAW</span>
             </div>
           </div>
-          {cameraOn ? (
+          {camerasRunning ? (
             <img
               src={`${API_BASE}/video_feed_geometry?index=${selectedCamIndex}&t=${reloadKey}`}
               className="w-full aspect-video object-cover"
@@ -347,7 +285,7 @@ export default function TrackGeometry() {
               <span>TRACK ANALYSIS</span>
             </div>
           </div>
-          {cameraOn ? (
+          {camerasRunning ? (
             <img
               src={`${API_BASE}/video_feed_geometry_processed?index=${selectedCamIndex}&t=${reloadKey}`}
               className="w-full aspect-video object-cover"
@@ -364,48 +302,25 @@ export default function TrackGeometry() {
         </div>
       </div>
 
-      {/* CONTROLS */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-8 bg-gray-900/50 p-6 rounded-2xl border border-white/5">
-
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={cameraOn ? stopCamera : startCamera}
-            disabled={busy}
-            className={`px-6 py-2 rounded-lg font-bold text-xs tracking-widest transition-all shadow-lg active:scale-95 flex items-center gap-2 uppercase ${busy ? "bg-gray-400 text-gray-200" : cameraOn ? "bg-rose-500 text-white ring-2 ring-rose-100" : "bg-blue-600 text-white ring-2 ring-blue-100"}`}
-          >
-            <div className={`w-2 h-2 rounded-full ${cameraOn ? "bg-white animate-pulse" : "bg-blue-300"}`} />
-            {cameraOn ? "Stop Cam" : "Start Cam"}
-          </button>
-
-          <button
-            onClick={recording ? stopRecording : startRecording}
-            disabled={busy || !cameraOn}
-            className={`px-6 py-2 rounded-lg font-bold text-xs tracking-widest transition-all shadow-lg active:scale-95 flex items-center gap-2 uppercase ${busy || !cameraOn ? "bg-gray-400 text-gray-200" : recording ? "bg-orange-500 text-white ring-2 ring-orange-100" : "bg-yellow-500 text-white ring-2 ring-yellow-100"}`}
-          >
-            {recording && <div className="w-2 h-2 rounded-full bg-white animate-pulse" />}
-            {recording ? "Stop Rec" : "Start Rec"}
-          </button>
-
           <button
             onClick={exportCSV}
             className="px-6 py-2 rounded-lg font-bold text-xs tracking-widest bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-lg active:scale-95 uppercase ring-2 ring-emerald-100"
           >
-            Export
+            Export CSV
           </button>
 
           <button
             onClick={() => clearView('geometry')}
             className="px-6 py-2 rounded-lg font-bold text-xs tracking-widest bg-white text-rose-600 hover:bg-rose-50 border border-rose-100 transition-all shadow-lg active:scale-95 uppercase ring-2 ring-rose-50"
           >
-            Clear
+            Clear Data
           </button>
         </div>
       </div>
 
-      {/* PREMIUM CHARTS - STACKED COLUMN */}
       <div className="grid grid-cols-1 gap-6 mt-6">
-
-        {/* CHART 2: GYROSCOPE ANALYSIS */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -457,9 +372,7 @@ export default function TrackGeometry() {
             </ResponsiveContainer>
           </div>
         </div>
-
       </div>
-
     </div>
   );
 }

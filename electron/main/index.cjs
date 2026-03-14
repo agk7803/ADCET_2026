@@ -105,29 +105,35 @@ async function createWindow() {
 
     // Handle file downloads — auto-save to storage folder
     win.webContents.session.on("will-download", (event, item) => {
-        const fileName = item.getFilename() || "report.pdf";
+        const fileName = item.getFilename();
         const desktopPath = path.join(os.homedir(), "Desktop");
         const reportRoot = path.join(desktopPath, "report");
 
         let savePath = "";
-        const lowerName = fileName.toLowerCase();
+        const lowerName = (fileName || "").toLowerCase();
 
         // 1. If it's a PDF and has "report" in name, STRICTLY land in Desktop/report/...
         if (lowerName.includes("report") && lowerName.endsWith(".pdf")) {
-            const reportMatch = fileName.match(/session_report_(\d{8}_\d{6})\.pdf/);
+            // Priority 1: Filename has timestamp
+            const reportMatch = (fileName || "").match(/session_report_(\d{8}_\d{6})\.pdf/);
             if (reportMatch) {
                 const ts = reportMatch[1];
                 const sessionDir = path.join(reportRoot, ts);
-                if (!fs.existsSync(sessionDir)) {
-                    fs.mkdirSync(sessionDir, { recursive: true });
-                }
+                if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
                 savePath = path.join(sessionDir, fileName);
             } else {
-                // Fallback for reports without timestamp: put in root report folder
-                if (!fs.existsSync(reportRoot)) {
+                // Priority 2: Try to find the MOST RECENT session folder on Desktop
+                let targetDir = reportRoot;
+                if (fs.existsSync(reportRoot)) {
+                    const dirs = fs.readdirSync(reportRoot).filter(d => fs.lstatSync(path.join(reportRoot, d)).isDirectory());
+                    if (dirs.length > 0) {
+                        const sortedDirs = dirs.sort((a, b) => b.localeCompare(a)); // Newest first (YYYYMMDD_HHMMSS)
+                        targetDir = path.join(reportRoot, sortedDirs[0]);
+                    }
+                } else {
                     fs.mkdirSync(reportRoot, { recursive: true });
                 }
-                savePath = path.join(reportRoot, fileName);
+                savePath = path.join(targetDir, fileName || "session_report.pdf");
             }
         } else {
             // 2. Fallback for other non-report exports (Telemetry, Acceleration, etc.)
@@ -144,7 +150,7 @@ async function createWindow() {
 
             const finalDir = subFolder ? path.join(storageDir, subFolder) : storageDir;
             if (!fs.existsSync(finalDir)) fs.mkdirSync(finalDir, { recursive: true });
-            savePath = path.join(finalDir, fileName);
+            savePath = path.join(finalDir, fileName || "export.dat");
         }
 
         item.setSavePath(savePath);

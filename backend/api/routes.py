@@ -227,17 +227,24 @@ def get_session_telemetry(session_id: int):
     return {"telemetry": data}
 
 @router.get("/sessions/{session_id}/report")
-def get_session_report(session_id: int):
-    """Generate and download a PDF inspection report (folder-based)."""
+def get_session_report(session_id: str):
+    """Generate and download a PDF inspection report for a specific session."""
     try:
-        pdf_path = report_service.report_gen.generate_folder_report()
+        desktop_path = os.path.expanduser("~/Desktop")
+        session_dir = os.path.join(desktop_path, "report", str(session_id))
+        
+        if not os.path.exists(session_dir):
+            raise HTTPException(status_code=404, detail=f"Session folder {session_id} not found on Desktop")
+
+        pdf_path = report_service.report_gen.generate_folder_report(session_dir)
+        
         return FileResponse(
             path=pdf_path,
             filename=os.path.basename(pdf_path),
             media_type='application/pdf'
         )
     except Exception as e:
-        logger.error(f"Error generating report: {e}")
+        logger.error(f"Error generating report for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.api_route("/export-report", methods=["GET", "POST"])

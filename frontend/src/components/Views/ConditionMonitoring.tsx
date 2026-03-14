@@ -1,20 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useConnection } from "../../contexts/ConnectionContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 const ConditionMonitoring: React.FC = () => {
+  const { camerasRunning, recordingRunning } = useConnection();
   const [reloadKey, setReloadKey] = useState(0);
-  const [cameraOn, setCameraOn] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Timer State
   const [timer, setTimer] = useState("00:00:00");
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
 
-  const CAMERA_INDEX = 1; // fixed camera index for down-facing camera
+  const CAMERA_INDEX = 1; // fixed camera index for Condition Monitoring (YOLO)
 
   // AI Models
   const [models, setModels] = useState<string[]>([]);
@@ -30,14 +28,14 @@ const ConditionMonitoring: React.FC = () => {
 
   // Timer effect
   useEffect(() => {
-    if (recording && !startTimeRef.current) {
+    if (recordingRunning && !startTimeRef.current) {
       startTimeRef.current = Date.now();
       timerIntervalRef.current = window.setInterval(() => {
         if (startTimeRef.current) {
           setTimer(formatTime(Date.now() - startTimeRef.current));
         }
       }, 1000);
-    } else if (!recording) {
+    } else if (!recordingRunning) {
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
@@ -48,7 +46,7 @@ const ConditionMonitoring: React.FC = () => {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [recording]);
+  }, [recordingRunning]);
 
   // No camera list needed: we always use hardcoded camera index (2) for the rear-facing camera.
   // Fetch models on mount
@@ -76,103 +74,16 @@ const ConditionMonitoring: React.FC = () => {
     } catch (e) { console.error("Failed to select model", e); }
   };
 
-  const startRecording = async () => {
-    setError(null);
-    setBusy(true);
-    try {
-      // 1. Start Sensor Recording
-      await fetch(`${API_BASE}/recording/start`, { method: "POST" });
-      // 2. Start Condition Recording (Video) -> Handles Yolo/Laser based on mode
-      await fetch(`${API_BASE}/recording/condition/start`, { method: "POST" });
-      setRecording(true);
-    } catch (e: any) {
-      console.error("startRecording error", e);
-      setError(String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stopRecording = async () => {
-    setError(null);
-    setBusy(true);
-    try {
-      // 1. Stop Sensor Recording
-      await fetch(`${API_BASE}/recording/stop`, { method: "POST" });
-      // 2. Stop Condition Recording
-      await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
-      setRecording(false);
-    } catch (e: any) {
-      console.error("stopRecording error", e);
-      setError(String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startCamera = async () => {
-    setError(null);
-    setBusy(true);
-    try {
-      // 3. Ensure Sensors Connected (for Chainage)
-      try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { }
-
-      // 4. Start Camera Hardware
-      await fetch(`${API_BASE}/camera/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: CAMERA_INDEX }),
-      });
-
-      // 5. Reload MJPEG src and mark on
-      setReloadKey((k) => k + 1);
-      setCameraOn(true);
-    } catch (e: any) {
-      console.error("startCamera error", e);
-      setError(String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stopCamera = async () => {
-    setError(null);
-    setBusy(true);
-    setCameraOn(false); // optimistic update
-
-    // Fire and forget
-    if (recording) {
-        setRecording(false);
-        fetch(`${API_BASE}/recording/stop`, { method: "POST" }).catch(() => {});
-        fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" }).catch(() => {});
-    }
-
-    try {
-      await fetch(`${API_BASE}/camera/stop`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index: CAMERA_INDEX }),
-      });
-      setReloadKey((k) => k + 1);
-    } catch (e: any) {
-      console.error("stopCamera error", e);
-      setError(String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const reloadStream = () => setReloadKey((k) => k + 1);
-
   useEffect(() => {
-    const handleSystemStop = () => {
-      if (recording) stopRecording();
-      if (cameraOn) stopCamera();
+    const handleReload = () => {
+      setReloadKey((k) => k + 1);
     };
 
-    window.addEventListener("system-stop", handleSystemStop);
-    return () => window.removeEventListener("system-stop", handleSystemStop);
-  }, [cameraOn, recording]);
+    window.addEventListener("reload-streams", handleReload);
+    return () => {
+      window.removeEventListener("reload-streams", handleReload);
+    };
+  }, []);
 
   return (
     <div style={{ padding: 20 }}>
@@ -189,7 +100,7 @@ const ConditionMonitoring: React.FC = () => {
         </div>
       </div>
 
-      {/* Control Bar */}
+      {/* Control Bar - SIMPLIFIED */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
         {/* AI Controls (always shown) */}
         <div style={{ marginBottom: 12, padding: 12, background: "#faf5ff", border: "1px solid #e9d5ff", borderRadius: 6, display: "flex", alignItems: "center", gap: 10 }}>
@@ -211,36 +122,15 @@ const ConditionMonitoring: React.FC = () => {
           <span className="text-sm font-bold text-gray-700">Camera Source:</span>
           <span className="text-sm">Line scan camera</span>
         </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={cameraOn ? stopCamera : startCamera}
-            disabled={busy}
-            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy ? "bg-gray-400 text-gray-200" : cameraOn ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
-          >
-            {cameraOn ? "Stop Camera" : "Start Camera"}
-          </button>
-
-          <button
-            onClick={recording ? stopRecording : startRecording}
-            disabled={busy || !cameraOn}
-            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy || !cameraOn ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50" : recording ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-white"}`}
-          >
-            {recording ? "Stop Recording" : "Start Recording"}
-          </button>
-        </div>
-        <button onClick={reloadStream} style={{ background: "#6b7280", color: "#fff", padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer" }}>
-          Reload
-        </button>
       </div>
 
-      {error && <div style={{ color: "red", marginBottom: 12 }}>{error}</div>}
+
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {/* Left: Raw */}
         <div style={{ background: "#000", borderRadius: 8, overflow: "hidden", border: "2px solid #333", position: "relative", aspectRatio: "16/9" }}>
           <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12, zIndex: 2 }}>Raw Feed</div>
-          {cameraOn ? (
+          {camerasRunning ? (
             <img
               key={`raw-${reloadKey}`}
               src={`${API_BASE}/video_feed?index=${CAMERA_INDEX}&cache=${reloadKey}`}
@@ -257,7 +147,7 @@ const ConditionMonitoring: React.FC = () => {
           <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.6)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontSize: 12, zIndex: 2 }}>
             Processed (YOLO Overlay)
           </div>
-          {cameraOn ? (
+          {camerasRunning ? (
             <img
               key={`proc-${reloadKey}`}
               src={`${API_BASE}/video_feed_yolo?index=${CAMERA_INDEX}&cache=${reloadKey}`}

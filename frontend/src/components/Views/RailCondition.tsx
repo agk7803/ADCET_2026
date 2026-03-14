@@ -4,10 +4,7 @@ import { useConnection } from "../../contexts/ConnectionContext";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
 export default function RailCondition() {
-  const { data, connected } = useConnection();
-  const [cameraOn, setCameraOn] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const { data, connected, camerasRunning, recordingRunning } = useConnection();
   const [reloadKey, setReloadKey] = useState(0);
 
   const [localChainage, setLocalChainage] = useState(data?.y ?? 0);
@@ -85,7 +82,7 @@ export default function RailCondition() {
   };
 
   useEffect(() => {
-    if (recording) {
+    if (recordingRunning) {
       timerRef.current = setInterval(() => {
         setElapsedTime(prev => prev + 1);
       }, 1000);
@@ -95,7 +92,7 @@ export default function RailCondition() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [recording]);
+  }, [recordingRunning]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
@@ -104,78 +101,15 @@ export default function RailCondition() {
     return `${h}:${m}:${s}`;
   };
 
-  const startRecording = async () => {
-    setBusy(true);
-    try {
-      const res = await fetch(`${API_BASE}/recording/condition/start`, { method: "POST" });
-      if (!res.ok) throw new Error("Server returned " + res.status);
-      setRecording(true);
-    } catch (e: any) {
-      console.error(e);
-      alert("Error: " + (e.message || "Failed to start recording"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stopRecording = async () => {
-    setBusy(true);
-    setRecording(false);
-    try {
-      await fetch(`${API_BASE}/recording/condition/stop`, { method: "POST" });
-    } catch (e: any) {
-      console.error(e);
-      alert("Error: " + (e.message || "Failed to stop recording"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startCamera = async () => {
-    setBusy(true);
-    try {
-      try { await fetch(`${API_BASE}/connect`, { method: "POST" }); } catch (e) { console.warn("Connect failed or already connected"); }
-
-      const body = { index: selectedCamIndex };
-      await fetch(`${API_BASE}/camera/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      setElapsedTime(0);
-      setCameraOn(true);
-      setReloadKey((p) => p + 1);
-    } catch (e: any) {
-      console.error(e);
-      alert("Error: " + (e.message || "Failed to start camera"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stopCamera = async () => {
-    setBusy(true);
-    setCameraOn(false);
-    
-    if (recording) {
-      stopRecording().catch(() => {});
-    }
-    
-    try {
-      const body = { index: selectedCamIndex };
-      await fetch(`${API_BASE}/camera/stop`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (e: any) {
-      console.error(e);
-      alert("Error: " + (e.message || "Failed to stop camera"));
-    } finally {
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    const handleReload = () => {
+      setReloadKey(k => k + 1);
+    };
+    window.addEventListener("reload-streams", handleReload);
+    return () => {
+      window.removeEventListener("reload-streams", handleReload);
+    };
+  }, []);
 
   return (
     <div className="p-6 space-y-6">
@@ -239,24 +173,7 @@ export default function RailCondition() {
           </select>
         </div>
 
-        {/* UNIFIED BUTTONS */}
-        <div className="flex gap-2">
-          <button
-            onClick={cameraOn ? stopCamera : startCamera}
-            disabled={busy}
-            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy ? "bg-gray-400 text-gray-200" : cameraOn ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
-          >
-            {cameraOn ? "Stop Camera" : "Start Camera"}
-          </button>
-
-          <button
-            onClick={recording ? stopRecording : startRecording}
-            disabled={busy || !cameraOn}
-            className={`px-4 py-2 rounded font-bold transition shadow text-sm whitespace-nowrap ${busy || !cameraOn ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-50" : recording ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-white"}`}
-          >
-            {recording ? "Stop Recording" : "Start Recording"}
-          </button>
-        </div>
+        {/* Unified controls moved to header */}
       </div>
 
       {/* VIDEO FEEDS */}
@@ -271,9 +188,9 @@ export default function RailCondition() {
             src={`${API_BASE}/video_feed?index=${selectedCamIndex}&t=${reloadKey}`}
             className="w-full h-full object-cover"
             alt="Raw Feed"
-            style={{ display: cameraOn ? 'block' : 'none' }}
+            style={{ display: camerasRunning ? 'block' : 'none' }}
           />
-          <div className="aspect-video flex items-center justify-center text-gray-500" style={{ display: cameraOn ? 'none' : 'flex' }}>
+          <div className="aspect-video flex items-center justify-center text-gray-500" style={{ display: camerasRunning ? 'none' : 'flex' }}>
             Feed Inactive
           </div>
         </div>
@@ -287,9 +204,9 @@ export default function RailCondition() {
             src={`${API_BASE}/video_feed_rail_ai?index=${selectedCamIndex}&t=${reloadKey}`}
             className="w-full h-full object-cover"
             alt="Processed Feed"
-            style={{ display: cameraOn ? 'block' : 'none' }}
+            style={{ display: camerasRunning ? 'block' : 'none' }}
           />
-          <div className="aspect-video flex items-center justify-center text-gray-500" style={{ display: cameraOn ? 'none' : 'flex' }}>
+          <div className="aspect-video flex items-center justify-center text-gray-500" style={{ display: camerasRunning ? 'none' : 'flex' }}>
             Feed Inactive
           </div>
         </div>

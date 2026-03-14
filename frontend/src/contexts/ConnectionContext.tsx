@@ -62,6 +62,12 @@ interface ConnectionContextType {
     toggleReplayPause: () => void;
     setReplaySpeed: (speed: number) => void;
     replayProgress: number; // 0 to 100
+
+    // System Control State
+    camerasRunning: boolean;
+    setCamerasRunning: (val: boolean) => void;
+    recordingRunning: boolean;
+    setRecordingRunning: (val: boolean) => void;
 }
 
 const ConnectionContext = createContext<ConnectionContextType | undefined>(undefined);
@@ -96,6 +102,9 @@ export const ConnectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }, [uiDataActive]);
 
     const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+
+    const [camerasRunning, setCamerasRunning] = useState(false);
+    const [recordingRunning, setRecordingRunning] = useState(false);
 
     const systemOnline = backendConnected;
     const systemLive = backendConnected && connected && sensorsRunning;
@@ -405,7 +414,11 @@ export const ConnectionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 stopReplay,
                 toggleReplayPause,
                 setReplaySpeed,
-                replayProgress
+                replayProgress,
+                camerasRunning,
+                setCamerasRunning,
+                recordingRunning,
+                setRecordingRunning
             }}
         >
             {children}
