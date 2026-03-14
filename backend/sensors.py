@@ -641,9 +641,14 @@ def start_recording(file_prefix="session"):
     _record_start_time = time.time()
 
     # Create a session-root directory for this recording run
-    root = config.STORAGE_DIR
-    session_dir = os.path.join(root, "sessions", ts_str)
-    os.makedirs(session_dir, exist_ok=True)
+    try:
+        from backend.services import report_session
+        session_dir = report_session.get_report_dir()
+    except Exception:
+        root = config.STORAGE_DIR
+        session_dir = os.path.join(root, "sessions", ts_str)
+        os.makedirs(session_dir, exist_ok=True)
+        
     _current_session_dir = session_dir
 
     # Ensure expected subdirectories exist under the session folder

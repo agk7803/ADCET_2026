@@ -3,6 +3,7 @@ const { app, BrowserWindow, dialog, shell } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const waitPort = require("wait-port");
 
 const devForceVenv = true;
@@ -105,28 +106,47 @@ async function createWindow() {
     // Handle file downloads — auto-save to storage folder
     win.webContents.session.on("will-download", (event, item) => {
         const fileName = item.getFilename() || "report.pdf";
-        const storageDir = path.join(__dirname, "..", "..", "..", "storage");
+        const desktopPath = path.join(os.homedir(), "Desktop");
+        const reportRoot = path.join(desktopPath, "report");
 
+        let savePath = "";
         const lowerName = fileName.toLowerCase();
-        let subFolder = "";
 
+        // 1. If it's a PDF and has "report" in name, STRICTLY land in Desktop/report/...
         if (lowerName.includes("report") && lowerName.endsWith(".pdf")) {
-            subFolder = "Reports";
-        } else if (lowerName.includes("telemetry") && lowerName.endsWith(".csv")) {
-            subFolder = "Exports";
-        } else if (lowerName.includes("acceleration") && lowerName.endsWith(".xlsx")) {
-            subFolder = "Acceleration";
-        } else if (lowerName.includes("export") && lowerName.endsWith(".xlsx")) {
-            subFolder = "Infringements";
+            const reportMatch = fileName.match(/session_report_(\d{8}_\d{6})\.pdf/);
+            if (reportMatch) {
+                const ts = reportMatch[1];
+                const sessionDir = path.join(reportRoot, ts);
+                if (!fs.existsSync(sessionDir)) {
+                    fs.mkdirSync(sessionDir, { recursive: true });
+                }
+                savePath = path.join(sessionDir, fileName);
+            } else {
+                // Fallback for reports without timestamp: put in root report folder
+                if (!fs.existsSync(reportRoot)) {
+                    fs.mkdirSync(reportRoot, { recursive: true });
+                }
+                savePath = path.join(reportRoot, fileName);
+            }
+        } else {
+            // 2. Fallback for other non-report exports (Telemetry, Acceleration, etc.)
+            const storageDir = path.join(__dirname, "..", "..", "..", "storage");
+            let subFolder = "";
+
+            if (lowerName.includes("telemetry") && lowerName.endsWith(".csv")) {
+                subFolder = "Exports";
+            } else if (lowerName.includes("acceleration") && lowerName.endsWith(".xlsx")) {
+                subFolder = "Acceleration";
+            } else if (lowerName.includes("export") && lowerName.endsWith(".xlsx")) {
+                subFolder = "Infringements";
+            }
+
+            const finalDir = subFolder ? path.join(storageDir, subFolder) : storageDir;
+            if (!fs.existsSync(finalDir)) fs.mkdirSync(finalDir, { recursive: true });
+            savePath = path.join(finalDir, fileName);
         }
 
-        const finalStorageDir = path.join(storageDir, subFolder);
-
-        if (!fs.existsSync(finalStorageDir)) {
-            fs.mkdirSync(finalStorageDir, { recursive: true });
-        }
-
-        const savePath = path.join(finalStorageDir, fileName);
         item.setSavePath(savePath);
 
         item.once("done", (e, state) => {

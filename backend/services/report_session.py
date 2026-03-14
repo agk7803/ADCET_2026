@@ -21,7 +21,6 @@ def start_report_session() -> str:
     global _active_dir
     with _lock:
         if _active_dir is not None and os.path.isdir(_active_dir):
-            # Reuse the current session folder so all tabs land together
             return _active_dir
         desktop_path = os.path.expanduser("~/Desktop")
         report_root = os.path.join(desktop_path, "report")

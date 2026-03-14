@@ -242,19 +242,20 @@ def get_session_report(session_id: int):
 
 @router.api_route("/export-report", methods=["GET", "POST"])
 def export_report():
-
     try:
         session_dir = report_session.get_report_dir()
-
+        # The service now returns path like report_YYYYMMDD_HHMMSS.pdf
         pdf_path = report_service.report_gen.generate_folder_report(session_dir)
 
         if not os.path.exists(pdf_path):
             raise Exception("PDF not generated")
 
+        download_name = os.path.basename(pdf_path)
+
         return FileResponse(
             path=pdf_path,
             media_type="application/pdf",
-            filename="session_report.pdf"
+            filename=download_name
         )
 
     except Exception as e:

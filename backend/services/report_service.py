@@ -46,7 +46,7 @@ class ReportGenerator:
             raise ValueError(f"Report folder not found: {folder_path}")
 
         session_id = os.path.basename(folder_path)
-        report_path = os.path.join(folder_path, "session_report.pdf")
+        report_path = os.path.join(folder_path, f"session_report_{session_id}.pdf")
         print(f"Session ID: {session_id}")
         print(f"Target PDF Path: {report_path}")
 
